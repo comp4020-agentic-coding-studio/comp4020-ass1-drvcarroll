@@ -1,12 +1,5 @@
 import type { Zone } from "../dns/types.js";
-
-// Two coordinate sets per level: a horizontal chain reads well at 1920x1080,
-// a vertical one at 390x844. Both are marked in full, so neither is a
-// fallback for the other.
-export interface Positions {
-  wide: Record<string, { x: number; y: number }>;
-  narrow: Record<string, { x: number; y: number }>;
-}
+import type { LevelConfig, Positions } from "./types.js";
 
 // "tld" and "auth" are roles, not machines: whichever zone the recursor is
 // talking to takes that seat, so adding a TLD costs zone data and no layout.
@@ -123,3 +116,18 @@ export const KNOWN_NAMES = [
 ];
 
 export const DEFAULT_QUERY = "www.anu.edu.au";
+
+// L1 asks one question only — "where is this?" — so it offers no type picker.
+export const LEVEL1: LevelConfig = {
+  id: "l1",
+  title: "The walk",
+  nodes: NODE_LABELS,
+  viewBox: VIEWBOX,
+  positions: POSITIONS,
+  edges: EDGES,
+  deferredEdges: DEFERRED_EDGES,
+  types: ["A"],
+  zones: ZONES,
+  knownNames: KNOWN_NAMES,
+  defaultQuery: DEFAULT_QUERY,
+};

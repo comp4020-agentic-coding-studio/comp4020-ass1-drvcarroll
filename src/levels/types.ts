@@ -1,0 +1,38 @@
+import type { RecordType, Zone } from "../dns/types.js";
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+// Two coordinate sets per level: a horizontal chain reads well at 1920x1080,
+// a vertical one at 390x844. Both are marked in full, so neither is a
+// fallback for the other.
+export interface Positions {
+  wide: Record<string, Point>;
+  narrow: Record<string, Point>;
+}
+
+export interface NodeLabel {
+  title: string;
+  role: string;
+}
+
+// Everything a level changes about the one persistent graph. Levels
+// reconfigure it; they never replace it, so the visitor can see what a level
+// added rather than being handed a fresh diagram.
+export interface LevelConfig {
+  id: string;
+  title: string;
+  nodes: Record<string, NodeLabel>;
+  viewBox: { wide: string; narrow: string };
+  positions: Positions;
+  edges: [string, string][];
+  // Edges that cannot honestly be drawn until a step uses them.
+  deferredEdges: Set<string>;
+  // Offered in the record-type picker. One entry means no picker.
+  types: RecordType[];
+  zones: Zone[];
+  knownNames: string[];
+  defaultQuery: string;
+}

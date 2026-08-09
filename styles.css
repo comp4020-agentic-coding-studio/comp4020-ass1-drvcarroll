@@ -161,6 +161,20 @@ button:hover {
   fill: var(--muted);
 }
 
+/* A level adds to the graph rather than replacing it, so what it added
+   should be visibly added. Falls back to an instant jump where the SVG
+   transform property is not animatable. */
+.node {
+  opacity: 1;
+  transition:
+    transform 0.5s ease,
+    opacity 0.45s ease;
+}
+
+.node[data-entering="true"] {
+  opacity: 0;
+}
+
 .node-box {
   fill: var(--panel);
   stroke: var(--line);

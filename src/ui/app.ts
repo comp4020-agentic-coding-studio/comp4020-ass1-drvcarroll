@@ -3,11 +3,11 @@ import { resolve } from "../dns/resolve.js";
 import type { ResolutionResult, ResolutionStep, Zone } from "../dns/types.js";
 import { playResolution, type Playback } from "../graph/animate.js";
 import { createGraph } from "../graph/render.js";
-import {
-  DEFAULT_QUERY,
-  KNOWN_NAMES,
-  ZONES as FALLBACK_ZONES,
-} from "../levels/level1.js";
+import { LEVEL1 } from "../levels/level1.js";
+
+const DEFAULT_QUERY = LEVEL1.defaultQuery;
+const KNOWN_NAMES = LEVEL1.knownNames;
+const FALLBACK_ZONES = LEVEL1.zones;
 
 const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   query: "Question",
@@ -81,7 +81,7 @@ export function start(): void {
   const source = document.querySelector<HTMLElement>("[data-source]");
   if (!stage || !form || !input || !log || !source) return;
 
-  const graph = createGraph(stage);
+  const graph = createGraph(stage, LEVEL1);
   let playback: Playback | undefined;
 
   const options = document.createElement("datalist");

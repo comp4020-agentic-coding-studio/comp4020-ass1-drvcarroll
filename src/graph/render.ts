@@ -1,11 +1,4 @@
-import {
-  DEFERRED_EDGES,
-  EDGES,
-  NODE_LABELS,
-  POSITIONS,
-  VIEWBOX,
-  type Positions,
-} from "../levels/level1.js";
+import type { LevelConfig, Point, Positions } from "../levels/types.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NARROW = "(max-width: 700px)";
@@ -13,8 +6,6 @@ const LABEL_OFFSET = 15;
 
 // Compass arrows, indexed by eighth-turn. SVG y grows downward.
 const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
-
-type Point = { x: number; y: number };
 
 function arrowFor(from: Point, to: Point): string {
   const eighth = Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI / 4);
@@ -27,6 +18,7 @@ export interface Graph {
   root: SVGSVGElement;
   layout: Layout;
   nodeAt(id: string): Point;
+  setLevel(level: LevelConfig): void;
   setNodeState(id: string, state: string): void;
   setNodeZone(id: string, zone: string): void;
   revealEdge(from: string, to: string): void;
@@ -46,12 +38,16 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
-export function createGraph(container: HTMLElement): Graph {
+export function createGraph(
+  container: HTMLElement,
+  initial: LevelConfig,
+): Graph {
   const media = window.matchMedia(NARROW);
   let layout: Layout = media.matches ? "narrow" : "wide";
+  let level = initial;
 
   const svg = el("svg", {
-    viewBox: VIEWBOX[layout],
+    viewBox: level.viewBox[layout],
     role: "img",
     "aria-label": "DNS resolution between your machine and the nameservers",
   });
@@ -70,12 +66,21 @@ export function createGraph(container: HTMLElement): Graph {
   const nodeGroups = new Map<string, SVGGElement>();
   const nodeRoles = new Map<string, SVGTextElement>();
 
-  for (const [from, to] of EDGES) {
-    const key = `${from}:${to}`;
+  // Edges are undirected on screen, so a step going either way finds one.
+  const edgeKey = (from: string, to: string): string | undefined => {
+    if (edgeLines.has(`${from}:${to}`)) return `${from}:${to}`;
+    if (edgeLines.has(`${to}:${from}`)) return `${to}:${from}`;
+    return undefined;
+  };
+
+  const positionsFor = (id: string): Point =>
+    level.positions[layout][id] ?? { x: 0, y: 0 };
+
+  function addEdge(key: string): void {
     const line = el("line", {
       class: "edge",
       "data-edge": key,
-      "data-hidden": String(DEFERRED_EDGES.has(key)),
+      "data-hidden": String(level.deferredEdges.has(key)),
     });
     edgeLines.set(key, line);
     edgeLayer.append(line);
@@ -85,20 +90,14 @@ export function createGraph(container: HTMLElement): Graph {
     labelLayer.append(label);
   }
 
-  // Edges are undirected on screen, so a step going either way finds one.
-  const edgeKey = (from: string, to: string): string | undefined => {
-    if (edgeLines.has(`${from}:${to}`)) return `${from}:${to}`;
-    if (edgeLines.has(`${to}:${from}`)) return `${to}:${from}`;
-    return undefined;
-  };
-
-  for (const id of Object.keys(NODE_LABELS)) {
-    const label = NODE_LABELS[id];
-    if (label === undefined) continue;
+  function addNode(id: string, entering: boolean): void {
+    const label = level.nodes[id];
+    if (label === undefined) return;
 
     // Geometry stays in attributes, not CSS: the CSS geometry properties
     // (x/y/width/height) are not portable enough to bet the page on.
     const group = el("g", { class: "node", "data-node": id });
+    if (entering) group.setAttribute("data-entering", "true");
     const box = el("rect", {
       class: "node-box",
       x: "-74",
@@ -116,13 +115,17 @@ export function createGraph(container: HTMLElement): Graph {
     nodeGroups.set(id, group);
     nodeRoles.set(id, role);
     nodeLayer.append(group);
+
+    // Placed first, revealed on the next frame, so the fade actually runs.
+    if (entering) {
+      requestAnimationFrame(() => {
+        group.removeAttribute("data-entering");
+      });
+    }
   }
 
-  const positionsFor = (id: string) =>
-    POSITIONS[layout][id] ?? { x: 0, y: 0 };
-
   function place(): void {
-    svg.setAttribute("viewBox", VIEWBOX[layout]);
+    svg.setAttribute("viewBox", level.viewBox[layout]);
 
     for (const [id, group] of nodeGroups) {
       const { x, y } = positionsFor(id);
@@ -157,7 +160,45 @@ export function createGraph(container: HTMLElement): Graph {
     }
   }
 
-  place();
+  function resetEdges(): void {
+    edgeMarks.clear();
+    for (const label of edgeLabels.values()) label.textContent = "";
+    for (const [key, line] of edgeLines) {
+      line.setAttribute("data-hidden", String(level.deferredEdges.has(key)));
+    }
+  }
+
+  // A level is a diff, not a redraw: what a level adds should be visibly
+  // added, because that is the escalation the visitor is being shown.
+  function syncTo(next: LevelConfig): void {
+    const first = nodeGroups.size === 0;
+    level = next;
+
+    const wanted = new Set(next.edges.map(([from, to]) => `${from}:${to}`));
+    for (const [key, line] of edgeLines) {
+      if (wanted.has(key)) continue;
+      line.remove();
+      edgeLabels.get(key)?.remove();
+      edgeLines.delete(key);
+      edgeLabels.delete(key);
+    }
+    for (const key of wanted) if (!edgeLines.has(key)) addEdge(key);
+
+    for (const [id, group] of nodeGroups) {
+      if (id in next.nodes) continue;
+      group.remove();
+      nodeGroups.delete(id);
+      nodeRoles.delete(id);
+    }
+    for (const id of Object.keys(next.nodes)) {
+      if (!nodeGroups.has(id)) addNode(id, !first);
+    }
+
+    resetEdges();
+    place();
+  }
+
+  syncTo(initial);
 
   const handlers: (() => void)[] = [];
   media.addEventListener("change", (event) => {
@@ -172,6 +213,7 @@ export function createGraph(container: HTMLElement): Graph {
       return layout;
     },
     nodeAt: positionsFor,
+    setLevel: syncTo,
     setNodeState(id, state) {
       nodeGroups.get(id)?.setAttribute("data-state", state);
     },
@@ -197,13 +239,9 @@ export function createGraph(container: HTMLElement): Graph {
         group.removeAttribute("data-state");
       }
       for (const [id, role] of nodeRoles) {
-        role.textContent = NODE_LABELS[id]?.role ?? "";
+        role.textContent = level.nodes[id]?.role ?? "";
       }
-      edgeMarks.clear();
-      for (const label of edgeLabels.values()) label.textContent = "";
-      for (const [key, line] of edgeLines) {
-        line.setAttribute("data-hidden", String(DEFERRED_EDGES.has(key)));
-      }
+      resetEdges();
     },
     onLayoutChange(handler) {
       handlers.push(handler);
