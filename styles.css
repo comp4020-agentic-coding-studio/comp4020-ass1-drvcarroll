@@ -7,6 +7,7 @@
   --query: #0b5fff;
   --referral: #b26a00;
   --answer: #0f8a4f;
+  --cname: #7b3fbf;
   --deny: #c02a2a;
 }
 
@@ -214,6 +215,11 @@ button:hover {
   stroke-width: 3;
 }
 
+/* An alias is neither a referral nor an answer: the walk starts over. */
+.node[data-state="cname"] .node-box {
+  stroke: var(--cname);
+}
+
 .node[data-state="nxdomain"] .node-box {
   stroke: var(--deny);
 }
@@ -228,6 +234,10 @@ button:hover {
 
 .packet[data-kind="answer"] {
   fill: var(--answer);
+}
+
+.packet[data-kind="cname"] {
+  fill: var(--cname);
 }
 
 .packet[data-kind="nxdomain"] {
@@ -265,6 +275,10 @@ button:hover {
 
 .step[data-kind="answer"] {
   border-left-color: var(--answer);
+}
+
+.step[data-kind="cname"] {
+  border-left-color: var(--cname);
 }
 
 .step[data-kind="nxdomain"] {

@@ -10,6 +10,8 @@ import type { DNSRecord, RecordType, Zone } from "./types.js";
 const ENDPOINT = "https://dns.google/resolve";
 const TIMEOUT_MS = 3000;
 const MAX_NS_PER_ZONE = 2;
+// Real alias chains are short. Two hops covers www → CDN without a slow page.
+const MAX_ALIAS_HOPS = 2;
 
 const TYPE_NAMES: Record<number, RecordType> = {
   1: "A",
@@ -30,6 +32,7 @@ interface DohRecord {
 export interface DohResponse {
   Status: number;
   Answer?: DohRecord[];
+  Authority?: DohRecord[];
 }
 
 export type FetchJson = (url: string) => Promise<DohResponse>;
@@ -51,11 +54,16 @@ async function defaultFetchJson(url: string): Promise<DohResponse> {
 const query = (name: string, type: RecordType): string =>
   `${ENDPOINT}?name=${encodeURIComponent(name)}&type=${type}`;
 
-// Only name-valued rdata gets the root dot. An address is not a name.
-const NAME_VALUED = new Set<RecordType>(["NS", "CNAME", "MX", "SOA"]);
+// Only name-valued rdata gets the root dot. An address is not a name, and MX
+// and SOA rdata are compound, so their names already carry their own dots.
+const NAME_VALUED = new Set<RecordType>(["NS", "CNAME"]);
 
-function toRecords(response: DohResponse, want: RecordType): DNSRecord[] {
-  return (response.Answer ?? [])
+function toRecords(
+  response: DohResponse,
+  want: RecordType,
+  section: "Answer" | "Authority" = "Answer",
+): DNSRecord[] {
+  return (response[section] ?? [])
     .filter((r) => TYPE_NAMES[r.type] === want)
     .map((r) => ({
       name: fqdn(r.name),
@@ -63,6 +71,30 @@ function toRecords(response: DohResponse, want: RecordType): DNSRecord[] {
       ttl: r.TTL,
       data: NAME_VALUED.has(want) ? fqdn(r.data) : r.data,
     }));
+}
+
+// Two chains can share zones — an alias usually lives near its target, and
+// both walks start at the same root.
+function mergeZones(base: Zone[], extra: Zone[]): Zone[] {
+  const key = (r: DNSRecord): string => `${r.name}|${r.type}|${r.data}`;
+  const byOrigin = new Map(base.map((z) => [z.origin, z]));
+
+  for (const zone of extra) {
+    const existing = byOrigin.get(zone.origin);
+    if (existing === undefined) {
+      byOrigin.set(zone.origin, zone);
+      continue;
+    }
+    const seen = new Set(existing.records.map(key));
+    byOrigin.set(zone.origin, {
+      ...existing,
+      records: [
+        ...existing.records,
+        ...zone.records.filter((r) => !seen.has(key(r))),
+      ],
+    });
+  }
+  return [...byOrigin.values()];
 }
 
 // Every suffix of the name, root first, including the name itself — an apex
@@ -113,7 +145,9 @@ function seatFor(index: number, total: number): string {
 
 export async function buildZones(
   name: string,
+  type: RecordType = "A",
   fetchJson: FetchJson = defaultFetchJson,
+  hops = MAX_ALIAS_HOPS,
 ): Promise<LiveZones> {
   const target = fqdn(name);
   const delegations = await delegationsFor(suffixesOf(target), fetchJson);
@@ -121,24 +155,31 @@ export async function buildZones(
     suffixesOf(target).filter((s) => delegations.has(s)),
   );
 
-  // Real answers often arrive via a CNAME, so the A record is named for the
-  // alias, not the question. L1 shows what the stub consumes; the chain
-  // itself is L2's subject.
-  const answers = toRecords(await fetchJson(query(target, "A")), "A").map(
-    (record) => ({ ...record, name: target }),
-  );
-  const zones: Zone[] = [];
+  const response = await fetchJson(query(target, type));
+  const answers = toRecords(response, type);
+  // An alias answers for any type but its own, and NXDOMAIN carries the SOA
+  // of the zone that denied the name, which is what sets the negative TTL.
+  const aliases = type === "CNAME" ? [] : toRecords(response, "CNAME");
+  const denial = toRecords(response, "SOA", "Authority");
 
+  const zones: Zone[] = [];
   for (const [index, origin] of cuts.entries()) {
     const child = cuts[index + 1];
     const delegation = child === undefined ? [] : (delegations.get(child) ?? []);
     const records =
       child === undefined
-        ? answers
+        ? [...answers, ...aliases, ...denial]
         : [...delegation, ...(await glueFor(delegation, fetchJson))];
 
     zones.push({ origin, server: seatFor(index, cuts.length), records });
   }
 
-  return { zones, cuts };
+  // Chase the alias only when its own answer did not come back with it —
+  // an alias inside the same zone is already resolvable from these records.
+  const alias = aliases[0]?.data;
+  if (alias === undefined || hops <= 0) return { zones, cuts };
+  if (answers.some((r) => r.name === alias)) return { zones, cuts };
+
+  const chased = await buildZones(alias, type, fetchJson, hops - 1);
+  return { zones: mergeZones(zones, chased.zones), cuts };
 }
