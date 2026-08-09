@@ -1,13 +1,19 @@
 import { buildZones } from "../dns/live.js";
 import { resolve } from "../dns/resolve.js";
-import type { ResolutionResult, ResolutionStep, Zone } from "../dns/types.js";
+import type {
+  DNSRecord,
+  RecordType,
+  ResolutionResult,
+  ResolutionStep,
+  Zone,
+} from "../dns/types.js";
 import { playResolution, type Playback } from "../graph/animate.js";
 import { createGraph } from "../graph/render.js";
 import { LEVEL1 } from "../levels/level1.js";
+import { LEVEL2 } from "../levels/level2.js";
+import type { LevelConfig } from "../levels/types.js";
 
-const DEFAULT_QUERY = LEVEL1.defaultQuery;
-const KNOWN_NAMES = LEVEL1.knownNames;
-const FALLBACK_ZONES = LEVEL1.zones;
+const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2];
 
 const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   query: "Question",
@@ -17,20 +23,65 @@ const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   nxdomain: "No such name",
 };
 
-// The payoff: DNS is finished, so the browser can finally open a connection.
+// MX rdata is a priority and a hostname in one string. Only the tail is a
+// name you could connect to; an address has no priority to strip.
+const hostOf = (record: DNSRecord): string =>
+  record.data.split(" ").at(-1) ?? record.data;
+
+// The payoff: DNS is finished, so something can finally open a connection.
 // Not a DNS message, which is why it is added here rather than in resolve().
-function connectionStep(result: ResolutionResult): ResolutionStep[] {
-  if (result.outcome !== "answered") return [];
-  const address = result.answer[0]?.data ?? "";
+// A type with no destination gets no step — NS and SOA are not somewhere to go.
+function connectionStep(
+  result: ResolutionResult,
+  level: LevelConfig,
+): ResolutionStep[] {
+  const to = level.destinations[result.question.type];
+  const answer = result.answer[0];
+  if (result.outcome !== "answered" || to === undefined || !answer) return [];
   return [
     {
       from: "stub",
-      to: "origin",
+      to,
       kind: "query",
       records: [],
-      note: `Now the browser can connect to ${address}`,
+      note: `Now the browser can connect to ${hostOf(answer)}`,
     },
   ];
+}
+
+// The records a step carried, shown as data. A referral stops being a word
+// and becomes the NS records plus the glue that makes them reachable.
+function recordTable(records: DNSRecord[]): HTMLElement {
+  // Wrapped rather than made scrollable itself: `display: block` on a table
+  // costs its semantics, and the phone viewport is marked in full.
+  const scroller = document.createElement("div");
+  scroller.className = "records-scroll";
+  const table = document.createElement("table");
+  table.className = "records";
+  scroller.append(table);
+
+  const head = table.createTHead().insertRow();
+  for (const column of ["Name", "Type", "TTL", "Data"]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = column;
+    head.append(cell);
+  }
+
+  const body = table.createTBody();
+  for (const record of records) {
+    const row = body.insertRow();
+    row.dataset.type = record.type;
+    for (const value of [
+      record.name,
+      record.type,
+      `${String(record.ttl)}s`,
+      record.data,
+    ]) {
+      row.insertCell().textContent = value;
+    }
+  }
+  return scroller;
 }
 
 function stepRow(step: ResolutionStep, index: number): HTMLLIElement {
@@ -47,13 +98,15 @@ function stepRow(step: ResolutionStep, index: number): HTMLLIElement {
   note.textContent = step.note;
 
   row.append(label, note);
+  if (step.records.length > 0) row.append(recordTable(step.records));
   return row;
 }
 
 const SOURCE_NOTE: Record<string, string> = {
   loading: "Asking the real DNS…",
   live: "Real delegation data, fetched live over DNS-over-HTTPS. The names, addresses and TTLs below are genuine; the order of the walk is reconstructed, because a browser cannot watch a resolver work.",
-  fallback: "The network did not answer, so this is a stored miniature internet. Only anu.edu.au and google.com exist in it.",
+  fallback:
+    "The network did not answer, so this is a stored miniature internet. Only anu.edu.au and google.com exist in it.",
 };
 
 // A browser cannot observe referrals, so real zone data is fetched and the
@@ -61,59 +114,59 @@ const SOURCE_NOTE: Record<string, string> = {
 // page must still teach with the network unplugged.
 async function zonesFor(
   name: string,
+  type: RecordType,
+  level: LevelConfig,
   cache: Map<string, Zone[]>,
 ): Promise<{ zones: Zone[]; source: "live" | "fallback" }> {
-  const hit = cache.get(name);
+  const key = `${name}|${type}`;
+  const hit = cache.get(key);
   if (hit) return { zones: hit, source: "live" };
   try {
-    const { zones } = await buildZones(name);
-    cache.set(name, zones);
+    const { zones } = await buildZones(name, type);
+    cache.set(key, zones);
     return { zones, source: "live" };
   } catch {
-    return { zones: FALLBACK_ZONES, source: "fallback" };
+    return { zones: level.zones, source: "fallback" };
   }
 }
 
 export function start(): void {
   const stage = document.querySelector<HTMLElement>("[data-graph]");
+  const nav = document.querySelector<HTMLElement>("[data-levels]");
   const form = document.querySelector<HTMLFormElement>("[data-lookup]");
   const input = document.querySelector<HTMLInputElement>("[data-name]");
+  const picker = document.querySelector<HTMLSelectElement>("[data-type]");
   const log = document.querySelector<HTMLElement>('[data-testid="output"]');
   const source = document.querySelector<HTMLElement>("[data-source]");
-  if (!stage || !form || !input || !log || !source) return;
+  if (!stage || !nav || !form || !input || !picker || !log || !source) return;
 
-  const graph = createGraph(stage, LEVEL1);
+  let level = LEVELS[0] ?? LEVEL1;
+  const graph = createGraph(stage, level);
   let playback: Playback | undefined;
 
   const options = document.createElement("datalist");
   options.id = "known-names";
-  for (const name of KNOWN_NAMES) {
-    const option = document.createElement("option");
-    option.value = name;
-    options.append(option);
-  }
   input.setAttribute("list", options.id);
   input.after(options);
-  input.value = DEFAULT_QUERY;
 
   const cache = new Map<string, Zone[]>();
   let token = 0;
 
-  const run = async (name: string): Promise<void> => {
+  const run = async (name: string, type: RecordType): Promise<void> => {
     playback?.cancel();
     log.replaceChildren();
     source.dataset.state = "loading";
     source.textContent = SOURCE_NOTE.loading ?? "";
 
     const mine = (token += 1);
-    const { zones, source: origin } = await zonesFor(name, cache);
+    const { zones, source: origin } = await zonesFor(name, type, level, cache);
     if (mine !== token) return; // a newer lookup already started
 
     source.dataset.state = origin;
     source.textContent = SOURCE_NOTE[origin] ?? "";
 
-    const result = resolve({ name, type: "A" }, zones);
-    const steps = [...result.steps, ...connectionStep(result)];
+    const result = resolve({ name, type }, zones);
+    const steps = [...result.steps, ...connectionStep(result, level)];
 
     const list = document.createElement("ol");
     list.className = "steps";
@@ -136,10 +189,70 @@ export function start(): void {
     });
   };
 
+  const submit = (): void => {
+    const type = (picker.value || level.types[0] || "A") as RecordType;
+    void run(input.value.trim() || level.defaultQuery, type);
+  };
+
+  // A level reconfigures the one page: graph, picker, examples and prose.
+  // Nothing is replaced wholesale, so what a level added stays visible.
+  // An arrow, not a declaration: hoisting would discard the null narrowing
+  // the querySelector guard above just established.
+  const apply = (next: LevelConfig): void => {
+    level = next;
+    graph.setLevel(next);
+
+    for (const button of nav.querySelectorAll("button")) {
+      button.setAttribute(
+        "aria-current",
+        button.dataset.level === next.id ? "true" : "false",
+      );
+    }
+
+    options.replaceChildren(
+      ...next.knownNames.map((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        return option;
+      }),
+    );
+
+    // One type means the question never varies, so the control would be a
+    // decision the visitor is not being offered.
+    picker.hidden = next.types.length < 2;
+    picker.replaceChildren(
+      ...next.types.map((type) => {
+        const option = document.createElement("option");
+        option.value = type;
+        option.textContent = type;
+        return option;
+      }),
+    );
+
+    for (const notes of document.querySelectorAll<HTMLElement>("[data-notes]")) {
+      notes.hidden = notes.dataset.notes !== next.id;
+    }
+
+    input.value = next.defaultQuery;
+    submit();
+  };
+
+  for (const config of LEVELS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.level = config.id;
+    button.textContent = `${config.id.toUpperCase()} — ${config.title}`;
+    button.addEventListener("click", () => {
+      apply(config);
+    });
+    nav.append(button);
+  }
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    void run(input.value.trim() || DEFAULT_QUERY);
+    submit();
   });
+  picker.addEventListener("change", submit);
 
-  void run(DEFAULT_QUERY);
+  apply(level);
 }

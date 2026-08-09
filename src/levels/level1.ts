@@ -127,6 +127,7 @@ export const LEVEL1: LevelConfig = {
   edges: EDGES,
   deferredEdges: DEFERRED_EDGES,
   types: ["A"],
+  destinations: { A: "origin" },
   zones: ZONES,
   knownNames: KNOWN_NAMES,
   defaultQuery: DEFAULT_QUERY,

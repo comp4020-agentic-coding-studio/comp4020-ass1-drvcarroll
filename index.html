@@ -8,9 +8,7 @@
   </head>
   <body>
     <header>
-      <nav aria-label="Primary">
-        <a href="./">Level 1 — The walk</a>
-      </nav>
+      <nav aria-label="Levels" data-levels class="levels"></nav>
     </header>
 
     <main>
@@ -33,6 +31,7 @@
             autocomplete="off"
             aria-describedby="lookup-hint"
           />
+          <select id="type" data-type aria-label="Record type" hidden></select>
           <button data-testid="interaction" type="submit">Resolve</button>
         </div>
         <p id="lookup-hint" class="hint">
@@ -51,7 +50,7 @@
         <div data-testid="output" class="log"></div>
       </section>
 
-      <section class="notes">
+      <section class="notes" data-notes="l1">
         <h2>The thing to notice</h2>
         <p>
           Your machine sent one question and got one answer. Everything else
@@ -65,6 +64,33 @@
           a nameserver — they only hand out directions. That is why the line
           to the site cannot be drawn until the walk finishes: until then, you
           do not know the address to draw it to.
+        </p>
+      </section>
+
+      <section class="notes" data-notes="l2" hidden>
+        <h2>The thing to notice</h2>
+        <p>
+          The walk is the same. What changed is the <strong>question</strong>:
+          it has a type, and the type decides what comes back. Every referral
+          you watched in level 1 was made of <code>NS</code> records and the
+          <strong>glue</strong> addresses that make them usable — expand a
+          step and you are looking at the exact data the tree runs on.
+        </p>
+        <p>
+          Three answers behave differently. A <code>CNAME</code> is not an
+          address at all, it is another name, so the resolver throws away its
+          progress and <strong>starts again at the root</strong>. An
+          <code>MX</code> names a mail server rather than a web server, which
+          is why a second destination appeared below your machine — and its
+          answer is a name too, so it needs a lookup of its own. Ask for
+          <code>NS</code> or <code>SOA</code> and nothing lights up at the
+          bottom: knowing who runs a zone does not give you anywhere to
+          connect.
+        </p>
+        <p>
+          The <code>SOA</code> is the one you get when a name does not exist.
+          Its last number is how long every resolver is told to remember the
+          absence — a typo is cached exactly like a success.
         </p>
       </section>
     </main>

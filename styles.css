@@ -48,10 +48,14 @@ h2 {
   color: var(--muted);
 }
 
-nav a {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 0.9rem;
+/* Levels are a control, not navigation: one page reconfigures itself. */
+
+.levels {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  max-width: 62rem;
+  margin: 0 auto;
 }
 
 /* Lookup control */
@@ -82,6 +86,16 @@ input[type="text"] {
   background: var(--panel);
 }
 
+select {
+  padding: 0.7rem 0.6rem;
+  font: inherit;
+  font-family: ui-monospace, monospace;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+}
+
 button {
   padding: 0.7rem 1.4rem;
   font: inherit;
@@ -95,6 +109,27 @@ button {
 
 button:hover {
   background: var(--query);
+}
+
+.levels button {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.levels button[aria-current="true"] {
+  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.levels button:hover {
+  color: var(--ink);
+  border-color: var(--query);
+  background: transparent;
 }
 
 :focus-visible {
@@ -294,6 +329,60 @@ button:hover {
   font-family: ui-monospace, monospace;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* The records the step actually carried. This is where a referral stops
+   being a word and becomes NS records plus the glue that makes them usable. */
+
+.records-scroll {
+  flex: 1 0 100%;
+  min-width: 0;
+  overflow-x: auto;
+  margin: 0.5rem 0 0.15rem;
+}
+
+.records {
+  border-collapse: collapse;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.records th {
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+}
+
+.records th,
+.records td {
+  padding: 0.15rem 0.7rem 0.15rem 0;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+/* The type is the point of level 2, so it is the column that is coloured. */
+.records td:nth-child(2) {
+  font-weight: 600;
+}
+
+.records tr[data-type="NS"] td:nth-child(2) {
+  color: var(--referral);
+}
+
+.records tr[data-type="CNAME"] td:nth-child(2) {
+  color: var(--cname);
+}
+
+.records tr[data-type="SOA"] td:nth-child(2) {
+  color: var(--deny);
+}
+
+.records tr[data-type="MX"] td:nth-child(2),
+.records tr[data-type="A"] td:nth-child(2) {
+  color: var(--answer);
 }
 
 .summary {

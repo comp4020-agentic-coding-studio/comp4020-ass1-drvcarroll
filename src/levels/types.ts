@@ -32,6 +32,9 @@ export interface LevelConfig {
   deferredEdges: Set<string>;
   // Offered in the record-type picker. One entry means no picker.
   types: RecordType[];
+  // What a resolved record actually lets you reach. A type absent here ends
+  // the walk with nothing to connect to, which is true of NS and SOA.
+  destinations: Partial<Record<RecordType, string>>;
   zones: Zone[];
   knownNames: string[];
   defaultQuery: string;

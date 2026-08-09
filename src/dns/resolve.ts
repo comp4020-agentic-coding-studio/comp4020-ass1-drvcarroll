@@ -55,6 +55,17 @@ function glueFor(zone: Zone, delegation: DNSRecord[]): DNSRecord[] {
 // What one nameserver says when asked. Answer, referral, or NXDOMAIN — a
 // nameserver never goes and looks something up for you.
 export function respond(zone: Zone, q: Question): Response {
+  // Delegation outranks a local match. A parent holds NS records for its
+  // children, but they are the referral, not an authoritative answer — so
+  // "NS anu.edu.au." must still travel past the TLD that delegated it.
+  const delegation = findDelegation(zone, q.name);
+  if (delegation.length > 0) {
+    return {
+      kind: "referral",
+      records: [...delegation, ...glueFor(zone, delegation)],
+    };
+  }
+
   const answer = zone.records.filter(
     (r) => r.name === q.name && r.type === q.type,
   );
@@ -66,14 +77,6 @@ export function respond(zone: Zone, q: Question): Response {
     (r) => r.type === "CNAME" && r.name === q.name,
   );
   if (alias.length > 0) return { kind: "cname", records: alias };
-
-  const delegation = findDelegation(zone, q.name);
-  if (delegation.length > 0) {
-    return {
-      kind: "referral",
-      records: [...delegation, ...glueFor(zone, delegation)],
-    };
-  }
 
   return {
     kind: "nxdomain",
