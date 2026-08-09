@@ -8,12 +8,13 @@ viewports --- 1920×1080 (desktop) and 390×844 (phone) --- and both count in
 full, so make that artefact good at both and use the checks below to know
 whether it is.
 
-What you're building this week — the spec — is published on the course website,
-and this repo's name tells you which deliverable it is. Run the course plugin's
+The course website publishes this deliverable's brief and spec. The brief poses
+the problem; the spec is the fixed contract every response must satisfy. This
+repo's name tells you which deliverable applies. Run the course plugin's
 **start** skill at the start of each week: it pulls the right spec from the
 course API, carries your harness forward from last week, and helps you turn the
-spec's checkable lines into tests of your own. Read the spec before you build,
-and see `spec/README.md` for how the checks in this repo relate to it.
+spec's checkable lines into tests of your own. Read the brief and spec before
+you plan or build, and see `spec/README.md` for how the checks relate to them.
 
 ## How to work in here
 
@@ -63,7 +64,7 @@ running counts as not green, so ship with time for CI to finish.
   if it loads locally.
 - **spec** --- `spec/invariants.test.ts` asserts what's true of any good
   website, whatever the week's brief asks; the tests you write for the week's
-  own spec run alongside it (any `spec/*.test.ts`). A failure names the contract
+  spec run alongside it (any `spec/*.test.ts`). A failure names the contract
   you haven't met yet.
 - **lint** --- `stylelint` for CSS, `oxlint` for TypeScript. Flags code that's
   wrong, fragile, or non-idiomatic. Read the rule it names.
@@ -114,6 +115,11 @@ generators (Astro included) need `base` set explicitly, and getting it wrong
 looks fine locally while every asset 404s on the live URL. And commit the
 updated `pnpm-lock.yaml`: CI installs with `--frozen-lockfile`.
 
+For the course default (Astro) or the bare hand-written arm, don't wire the swap
+by hand: the course plugin's `stack` skill runs a tested conversion script that
+handles both of the traps above plus the CI link-check patch, and leaves the
+whole change staged as one reviewable diff.
+
 ## Your process is part of the mark
 
 The deployed page is only half of it. How you got there is marked too: your
@@ -160,3 +166,19 @@ catching you out, a fact about the stack the agent keeps getting wrong --- write
 it down here. Growing this file is the work of harness engineering, and the gap
 between this boilerplate and your own version is part of what your prototype
 says about the developer you're becoming.
+
+## Code Style Guide
+
+The general architecture and structure of any software solution should be planned and
+confirmed with the user before execution. All code written should be:
+- Modular
+- Efficient
+- Extensible
+- Readable
+
+Each language should follow the official styleguides, or those from google if official ones
+are unavailable.
+
+Comments should be descriptive but concise, no more than 2 lines of text max. Each line
+of code should be no more than 80 characters per line. The same expression can span
+multiple lines - an 80 char limit is purely for readability.
