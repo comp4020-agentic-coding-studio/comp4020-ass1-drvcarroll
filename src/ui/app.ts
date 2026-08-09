@@ -12,6 +12,7 @@ import { createGraph } from "../graph/render.js";
 import { LEVEL1 } from "../levels/level1.js";
 import { LEVEL2 } from "../levels/level2.js";
 import type { LevelConfig } from "../levels/types.js";
+import { recordTable, type Seen } from "./records.js";
 
 const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2];
 
@@ -49,42 +50,7 @@ function connectionStep(
   ];
 }
 
-// The records a step carried, shown as data. A referral stops being a word
-// and becomes the NS records plus the glue that makes them reachable.
-function recordTable(records: DNSRecord[]): HTMLElement {
-  // Wrapped rather than made scrollable itself: `display: block` on a table
-  // costs its semantics, and the phone viewport is marked in full.
-  const scroller = document.createElement("div");
-  scroller.className = "records-scroll";
-  const table = document.createElement("table");
-  table.className = "records";
-  scroller.append(table);
-
-  const head = table.createTHead().insertRow();
-  for (const column of ["Name", "Type", "TTL", "Data"]) {
-    const cell = document.createElement("th");
-    cell.scope = "col";
-    cell.textContent = column;
-    head.append(cell);
-  }
-
-  const body = table.createTBody();
-  for (const record of records) {
-    const row = body.insertRow();
-    row.dataset.type = record.type;
-    for (const value of [
-      record.name,
-      record.type,
-      `${String(record.ttl)}s`,
-      record.data,
-    ]) {
-      row.insertCell().textContent = value;
-    }
-  }
-  return scroller;
-}
-
-function stepRow(step: ResolutionStep, index: number): HTMLLIElement {
+function stepRow(step: ResolutionStep, index: number, seen: Seen): HTMLLIElement {
   const row = document.createElement("li");
   row.className = "step";
   row.dataset.kind = step.kind;
@@ -98,7 +64,9 @@ function stepRow(step: ResolutionStep, index: number): HTMLLIElement {
   note.textContent = step.note;
 
   row.append(label, note);
-  if (step.records.length > 0) row.append(recordTable(step.records));
+  if (step.records.length > 0) {
+    row.append(recordTable(step.records, step.kind, seen));
+  }
   return row;
 }
 
@@ -172,9 +140,13 @@ export function start(): void {
     list.className = "steps";
     log.append(list);
 
+    // One walk, one set: a term is explained where it first appears and the
+    // later hops stay readable.
+    const seen: Seen = new Set();
+
     playback = playResolution(graph, steps, {
       onStep(step, index) {
-        list.append(stepRow(step, index));
+        list.append(stepRow(step, index, seen));
       },
       onDone() {
         const summary = document.createElement("p");

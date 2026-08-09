@@ -342,6 +342,7 @@ button:hover {
 }
 
 .records {
+  width: 100%;
   border-collapse: collapse;
   font-family: ui-monospace, monospace;
   font-size: 0.78rem;
@@ -353,36 +354,67 @@ button:hover {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
 }
 
 .records th,
 .records td {
-  padding: 0.15rem 0.7rem 0.15rem 0;
+  padding: 0.2rem 0.8rem 0.2rem 0;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
+  vertical-align: top;
 }
 
-/* The type is the point of level 2, so it is the column that is coloured. */
-.records td:nth-child(2) {
+.record-type {
+  font-weight: 700;
+}
+
+.record-ttl {
+  color: var(--muted);
+}
+
+/* What this record is doing in this message — the part a bare table hides. */
+.record-role {
   font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.records tr[data-type="NS"] td:nth-child(2) {
+tr[data-role="delegation"] .record-role {
   color: var(--referral);
 }
 
-.records tr[data-type="CNAME"] td:nth-child(2) {
+tr[data-role="glue"] .record-role {
+  color: var(--query);
+}
+
+tr[data-role="answer"] .record-role {
+  color: var(--answer);
+}
+
+tr[data-role="alias"] .record-role {
   color: var(--cname);
 }
 
-.records tr[data-type="SOA"] td:nth-child(2) {
+tr[data-role="denial"] .record-role {
   color: var(--deny);
 }
 
-.records tr[data-type="MX"] td:nth-child(2),
-.records tr[data-type="A"] td:nth-child(2) {
-  color: var(--answer);
+/* Said once, where it first matters, then never again in this walk. */
+.record-annotation td {
+  padding: 0.1rem 0 0.6rem;
+  border-bottom: 1px solid var(--line);
+  white-space: normal;
+}
+
+.record-annotation p {
+  margin: 0 0 0.2rem;
+  max-width: 46rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .summary {
