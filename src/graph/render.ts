@@ -4,6 +4,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const NARROW = "(max-width: 700px)";
 const LABEL_OFFSET = 15;
 
+// A speech box grows upward from the node that spoke, so the slot is anchored
+// by its bottom edge. Node positions are centres and a node is 60 tall.
+const SPEECH = { width: 210, height: 78, gap: 8, nodeHalf: 30 };
+
 // Compass arrows, indexed by eighth-turn. SVG y grows downward.
 const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
 
@@ -21,6 +25,7 @@ export interface Graph {
   setLevel(level: LevelConfig): void;
   setNodeState(id: string, state: string): void;
   setNodeZone(id: string, zone: string): void;
+  say(id: string, text: string, kind: string): void;
   revealEdge(from: string, to: string): void;
   markEdge(from: string, to: string, label: string): void;
   clearStates(): void;
@@ -55,7 +60,8 @@ export function createGraph(
   const edgeLayer = el("g", { class: "edges" });
   const labelLayer = el("g", { class: "edge-labels" });
   const nodeLayer = el("g", { class: "nodes" });
-  svg.append(edgeLayer, labelLayer, nodeLayer);
+  const speechLayer = el("g", { class: "speech-layer" });
+  svg.append(edgeLayer, labelLayer, nodeLayer, speechLayer);
   container.append(svg);
 
   const edgeLines = new Map<string, SVGLineElement>();
@@ -65,6 +71,7 @@ export function createGraph(
   const edgeMarks = new Map<string, { from: string; to: string; at: string }[]>();
   const nodeGroups = new Map<string, SVGGElement>();
   const nodeRoles = new Map<string, SVGTextElement>();
+  const speech = new Map<string, SVGForeignObjectElement>();
 
   // Edges are undirected on screen, so a step going either way finds one.
   const edgeKey = (from: string, to: string): string | undefined => {
@@ -124,6 +131,20 @@ export function createGraph(
     }
   }
 
+  function placeSpeech(id: string, slot: SVGForeignObjectElement): void {
+    const { x, y } = positionsFor(id);
+    slot.setAttribute("x", String(x - SPEECH.width / 2));
+    slot.setAttribute(
+      "y",
+      String(y - SPEECH.nodeHalf - SPEECH.gap - SPEECH.height),
+    );
+  }
+
+  function clearSpeech(): void {
+    for (const slot of speech.values()) slot.remove();
+    speech.clear();
+  }
+
   function place(): void {
     svg.setAttribute("viewBox", level.viewBox[layout]);
 
@@ -131,6 +152,8 @@ export function createGraph(
       const { x, y } = positionsFor(id);
       group.setAttribute("transform", `translate(${x} ${y})`);
     }
+
+    for (const [id, slot] of speech) placeSpeech(id, slot);
 
     for (const [key, line] of edgeLines) {
       const [from, to] = key.split(":");
@@ -194,6 +217,7 @@ export function createGraph(
       if (!nodeGroups.has(id)) addNode(id, !first);
     }
 
+    clearSpeech();
     resetEdges();
     place();
   }
@@ -221,6 +245,31 @@ export function createGraph(
       const role = nodeRoles.get(id);
       if (role) role.textContent = `serving ${zone}`;
     },
+    // The box belongs to whoever spoke, question or answer alike, and it
+    // stays put — at the end the graph is holding the whole conversation.
+    say(id, text, kind) {
+      let slot = speech.get(id);
+      if (slot === undefined) {
+        slot = el("foreignObject", {
+          class: "speech",
+          width: String(SPEECH.width),
+          height: String(SPEECH.height),
+        });
+        const inner = document.createElement("div");
+        inner.className = "speech-slot";
+        const box = document.createElement("div");
+        box.className = "speech-box";
+        inner.append(box);
+        slot.append(inner);
+        speech.set(id, slot);
+        speechLayer.append(slot);
+        placeSpeech(id, slot);
+      }
+      const box = slot.querySelector(".speech-box");
+      if (box === null) return;
+      box.setAttribute("data-kind", kind);
+      box.textContent = text;
+    },
     revealEdge(from, to) {
       const key = edgeKey(from, to);
       if (key) edgeLines.get(key)?.setAttribute("data-hidden", "false");
@@ -241,6 +290,7 @@ export function createGraph(
       for (const [id, role] of nodeRoles) {
         role.textContent = level.nodes[id]?.role ?? "";
       }
+      clearSpeech();
       resetEdges();
     },
     onLayoutChange(handler) {

@@ -12,7 +12,9 @@ export const NODE_LABELS: Record<string, { title: string; role: string }> = {
   origin: { title: "Web server", role: "the site itself" },
 };
 
-export const VIEWBOX = { wide: "0 0 960 460", narrow: "0 0 420 800" };
+// Negative top: the speech boxes grow upward out of the topmost nodes, so
+// the canvas has to start above them.
+export const VIEWBOX = { wide: "0 -60 960 520", narrow: "0 -60 420 860" };
 
 // The web server sits with the machine, not past the nameservers. Placing it
 // beyond them draws a path that does not exist: your traffic never travels

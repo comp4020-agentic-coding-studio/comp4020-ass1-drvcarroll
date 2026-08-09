@@ -31,6 +31,7 @@ export function playResolution(
     steps.forEach((step, index) => {
       hooks.onStep(step, index);
       if (step.zone) graph.setNodeZone(step.to, step.zone);
+      graph.say(step.from, step.note, step.kind);
       graph.revealEdge(step.from, step.to);
       graph.markEdge(step.from, step.to, String(index + 1));
       graph.setNodeState(step.to, step.kind);
@@ -58,6 +59,9 @@ export function playResolution(
     // Label the seat before the packet arrives, so the node already reads as
     // the zone it is about to answer for.
     if (step.zone) graph.setNodeZone(step.to, step.zone);
+    // The speaker speaks before the packet leaves, so the box is on screen
+    // for the whole time the message is in flight.
+    graph.say(step.from, step.note, step.kind);
     // The connection edge only exists once an address is known, so it is
     // drawn at the moment the packet is about to travel along it.
     graph.revealEdge(step.from, step.to);

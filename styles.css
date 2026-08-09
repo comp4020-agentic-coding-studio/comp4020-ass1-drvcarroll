@@ -259,6 +259,50 @@ button:hover {
   stroke: var(--deny);
 }
 
+/* The conversation, left standing on the graph: who said what, and when.
+   Bottom-aligned in its slot so the box grows upward out of the node. */
+
+/* A long note paints outside its slot rather than being cut in half. */
+.speech {
+  overflow: visible;
+}
+
+.speech-slot {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.speech-box {
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--query);
+  background: var(--panel);
+  border: 1px solid currentcolor;
+  border-radius: 8px;
+}
+
+.speech-box[data-kind="referral"] {
+  color: var(--referral);
+}
+
+.speech-box[data-kind="answer"] {
+  color: var(--answer);
+}
+
+.speech-box[data-kind="cname"] {
+  color: var(--cname);
+}
+
+.speech-box[data-kind="nxdomain"] {
+  color: var(--deny);
+}
+
 .packet {
   fill: var(--query);
 }

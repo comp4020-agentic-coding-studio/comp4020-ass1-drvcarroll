@@ -20,6 +20,10 @@ export const NODES = {
 
 // Beside the web server, under your machine — both are places you connect to
 // once DNS is done, never places the walk passes through.
+// Narrow stacks them between the machine and the resolver, so the servers
+// below shift down to leave the resolver's speech box somewhere to go.
+const NARROW_DROP = 100;
+
 export const LEVEL2_POSITIONS = {
   wide: {
     ...POSITIONS.wide,
@@ -27,7 +31,12 @@ export const LEVEL2_POSITIONS = {
     mail: { x: 250, y: 340 },
   },
   narrow: {
-    ...POSITIONS.narrow,
+    ...Object.fromEntries(
+      Object.entries(POSITIONS.narrow).map(([id, point]) => [
+        id,
+        id === "stub" ? point : { ...point, y: point.y + NARROW_DROP },
+      ]),
+    ),
     origin: { x: 110, y: 150 },
     mail: { x: 305, y: 150 },
   },
@@ -91,7 +100,7 @@ export const LEVEL2: LevelConfig = {
   id: "l2",
   title: "Records",
   nodes: NODES,
-  viewBox: VIEWBOX,
+  viewBox: { ...VIEWBOX, narrow: "0 -60 420 960" },
   positions: LEVEL2_POSITIONS,
   edges: LEVEL2_EDGES,
   deferredEdges: LEVEL2_DEFERRED,
