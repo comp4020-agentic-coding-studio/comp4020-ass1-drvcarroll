@@ -25,7 +25,7 @@ export interface Question {
 
 // A referral is not an answer. Keeping them distinct here is what lets the
 // graph render them differently — STRUCTURE.md concept 3.
-export type StepKind = "query" | "referral" | "answer" | "nxdomain";
+export type StepKind = "query" | "referral" | "answer" | "cname" | "nxdomain";
 
 // One directed message on one edge. The animation plays these in order.
 // `zone` names which zone the far end is speaking for, so one graph node can

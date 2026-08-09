@@ -60,6 +60,13 @@ export function respond(zone: Zone, q: Question): Response {
   );
   if (answer.length > 0) return { kind: "answer", records: answer };
 
+  // An alias answers for every type. The server cannot give you the record
+  // you asked for, only the name you should have asked about.
+  const alias = zone.records.filter(
+    (r) => r.type === "CNAME" && r.name === q.name,
+  );
+  if (alias.length > 0) return { kind: "cname", records: alias };
+
   const delegation = findDelegation(zone, q.name);
   if (delegation.length > 0) {
     return {
@@ -83,6 +90,19 @@ function describeReferral(records: DNSRecord[]): string {
   return `Not mine. Ask the nameservers for ${owner}`;
 }
 
+function noteFor(response: Response, q: Question, origin: string): string {
+  switch (response.kind) {
+    case "referral":
+      return describeReferral(response.records);
+    case "answer":
+      return `Authoritative: ${response.records.map((r) => r.data).join(", ")}`;
+    case "cname":
+      return `${q.name} is really ${response.records[0]?.data ?? "?"} — start again`;
+    case "nxdomain":
+      return `No such name below ${origin}`;
+  }
+}
+
 // The recursor's walk: start at the root and follow referrals until some
 // server is authoritative. The client never does any of this.
 export function resolve(q: Question, zones: Zone[]): ResolutionResult {
@@ -101,6 +121,11 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
   let outcome: ResolutionResult["outcome"] = "nxdomain";
   let answer: DNSRecord[] = [];
 
+  // The question can change mid-walk: an alias replaces the name being asked
+  // about, and `seen` stops two aliases pointing at each other forever.
+  let current: Question = { ...question };
+  const seen = new Set<string>([question.name]);
+
   for (let hop = 0; hop < MAX_HOPS && zone !== undefined; hop += 1) {
     const server = zone.server;
 
@@ -109,23 +134,18 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
       to: server,
       kind: "query",
       records: [],
-      note: `${question.type} record for ${question.name}?`,
+      note: `${current.type} record for ${current.name}?`,
       zone: zone.origin,
     });
 
-    const response = respond(zone, question);
+    const response = respond(zone, current);
     steps.push({
       from: server,
       to: RECURSOR,
       kind: response.kind,
       records: response.records,
       zone: zone.origin,
-      note:
-        response.kind === "referral"
-          ? describeReferral(response.records)
-          : response.kind === "answer"
-            ? `Authoritative: ${response.records.map((r) => r.data).join(", ")}`
-            : `No such name below ${zone.origin}`,
+      note: noteFor(response, current, zone.origin),
     });
 
     if (response.kind === "answer") {
@@ -134,6 +154,17 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
       break;
     }
     if (response.kind === "nxdomain") break;
+
+    // An alias sends the recursor back to the root: it now has a different
+    // name to find, and knows nothing about where that one lives.
+    if (response.kind === "cname") {
+      const alias = response.records[0]?.data;
+      if (alias === undefined || seen.has(alias)) break;
+      seen.add(alias);
+      current = { name: alias, type: current.type };
+      zone = zoneNamed(zones, ".");
+      continue;
+    }
 
     const nextOrigin = response.records[0]?.name;
     zone = nextOrigin === undefined ? undefined : zoneNamed(zones, nextOrigin);

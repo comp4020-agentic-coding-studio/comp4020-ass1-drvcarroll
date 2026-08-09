@@ -13,6 +13,7 @@ const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   query: "Question",
   referral: "Referral",
   answer: "Answer",
+  cname: "Alias",
   nxdomain: "No such name",
 };
 

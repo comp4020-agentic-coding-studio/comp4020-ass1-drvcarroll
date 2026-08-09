@@ -106,3 +106,60 @@ describe("the recursor walks the tree, the client does not", () => {
     );
   });
 });
+
+// A small world of its own: level 1's zones are deliberately alias-free, so
+// the CNAME behaviour is pinned here rather than by changing what L1 teaches.
+const ALIAS_ZONES: Zone[] = [
+  {
+    origin: ".",
+    server: "root",
+    records: [
+      { name: "example.", type: "NS", ttl: 172800, data: "ns.example." },
+      { name: "ns.example.", type: "A", ttl: 172800, data: "192.0.2.1" },
+      { name: ".", type: "SOA", ttl: 86400, data: "a.root-servers.net." },
+    ],
+  },
+  {
+    origin: "example.",
+    server: "auth",
+    records: [
+      { name: "www.example.", type: "CNAME", ttl: 300, data: "host.example." },
+      { name: "host.example.", type: "A", ttl: 300, data: "192.0.2.9" },
+      { name: "a.example.", type: "CNAME", ttl: 300, data: "b.example." },
+      { name: "b.example.", type: "CNAME", ttl: 300, data: "a.example." },
+      { name: "example.", type: "SOA", ttl: 3600, data: "ns.example." },
+    ],
+  },
+];
+
+describe("a CNAME is an alias, so resolution starts over", () => {
+  const aliased = resolve({ name: "www.example.", type: "A" }, ALIAS_ZONES);
+
+  it("hands back the alias rather than the address that was asked for", () => {
+    const cname = aliased.steps.find((s) => s.kind === "cname");
+    expect(cname?.records[0]?.data).toBe("host.example.");
+  });
+
+  it("walks the tree a second time, from the root, for the alias", () => {
+    const toRoot = aliased.steps.filter(
+      (s) => s.kind === "query" && s.to === "root",
+    );
+    expect(toRoot).toHaveLength(2);
+  });
+
+  it("ends on the address the alias points at", () => {
+    expect(aliased.outcome).toBe("answered");
+    expect(aliased.answer[0]?.data).toBe("192.0.2.9");
+  });
+
+  it("answers a CNAME directly when that is what was asked for", () => {
+    const asked = resolve({ name: "www.example.", type: "CNAME" }, ALIAS_ZONES);
+    expect(asked.steps.some((s) => s.kind === "cname")).toBe(false);
+    expect(asked.outcome).toBe("answered");
+  });
+
+  it("stops instead of looping when two aliases point at each other", () => {
+    const looped = resolve({ name: "a.example.", type: "A" }, ALIAS_ZONES);
+    expect(looped.outcome).toBe("nxdomain");
+  });
+});
