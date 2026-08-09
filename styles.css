@@ -160,6 +160,18 @@ button:hover {
   border-left-color: var(--referral);
 }
 
+/* What the selected record type actually is, said before the walk runs. */
+.type-note {
+  max-width: 44rem;
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
 /* Graph */
 
 .stage {
@@ -476,6 +488,13 @@ code {
   background: #eef2f6;
   padding: 0.1em 0.35em;
   border-radius: 4px;
+}
+
+/* The type badge reads as the label of the sentence that follows it. */
+.type-note code {
+  margin-right: 0.35rem;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 @media (prefers-color-scheme: dark) {

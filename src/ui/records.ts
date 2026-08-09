@@ -38,6 +38,10 @@ export function humanTtl(seconds: number): string {
   return plural(seconds / DAY, "day");
 }
 
+// One source for what a type is, so the picker's description and the note
+// beside the record itself can never drift apart.
+export const glossFor = (type: RecordType): string => TYPE_GLOSS[type];
+
 const TYPE_GLOSS: Record<RecordType, string> = {
   A: "An address — the end of the road, and the only kind of answer you can open a connection to.",
   AAAA: "An IPv6 address. Same job as an A record, in 128 bits instead of 32.",

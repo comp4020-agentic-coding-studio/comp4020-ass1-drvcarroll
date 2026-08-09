@@ -12,7 +12,7 @@ import { createGraph } from "../graph/render.js";
 import { LEVEL1 } from "../levels/level1.js";
 import { LEVEL2 } from "../levels/level2.js";
 import type { LevelConfig } from "../levels/types.js";
-import { recordTable, type Seen } from "./records.js";
+import { glossFor, recordTable, type Seen } from "./records.js";
 
 const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2];
 
@@ -104,9 +104,11 @@ export function start(): void {
   const form = document.querySelector<HTMLFormElement>("[data-lookup]");
   const input = document.querySelector<HTMLInputElement>("[data-name]");
   const picker = document.querySelector<HTMLSelectElement>("[data-type]");
+  const typeNote = document.querySelector<HTMLElement>("[data-type-note]");
   const log = document.querySelector<HTMLElement>('[data-testid="output"]');
   const source = document.querySelector<HTMLElement>("[data-source]");
-  if (!stage || !nav || !form || !input || !picker || !log || !source) return;
+  if (!stage || !nav || !form || !input || !picker || !typeNote) return;
+  if (!log || !source) return;
 
   let level = LEVELS[0] ?? LEVEL1;
   const graph = createGraph(stage, level);
@@ -161,9 +163,21 @@ export function start(): void {
     });
   };
 
+  const chosenType = (): RecordType =>
+    (picker.value || level.types[0] || "A") as RecordType;
+
   const submit = (): void => {
-    const type = (picker.value || level.types[0] || "A") as RecordType;
-    void run(input.value.trim() || level.defaultQuery, type);
+    void run(input.value.trim() || level.defaultQuery, chosenType());
+  };
+
+  // Says what the selected type is before the walk runs, so the picker is a
+  // choice the visitor understands rather than five acronyms.
+  const describeType = (): void => {
+    typeNote.hidden = picker.hidden;
+    if (picker.hidden) return;
+    const badge = document.createElement("code");
+    badge.textContent = chosenType();
+    typeNote.replaceChildren(badge, ` ${glossFor(chosenType())}`);
   };
 
   // A level reconfigures the one page: graph, picker, examples and prose.
@@ -205,6 +219,7 @@ export function start(): void {
       notes.hidden = notes.dataset.notes !== next.id;
     }
 
+    describeType();
     input.value = next.defaultQuery;
     submit();
   };
@@ -224,7 +239,10 @@ export function start(): void {
     event.preventDefault();
     submit();
   });
-  picker.addEventListener("change", submit);
+  picker.addEventListener("change", () => {
+    describeType();
+    submit();
+  });
 
   apply(level);
 }
