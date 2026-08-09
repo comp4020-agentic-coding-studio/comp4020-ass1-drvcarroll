@@ -16,6 +16,9 @@ export interface Zone {
   origin: string; // "." for root, "au." for the TLD, and so on
   server: NodeId;
   records: DNSRecord[];
+  // Which nameserver this is. Normally redundant — until two servers claim
+  // the same zone, which is precisely what a poisoned delegation looks like.
+  ns?: string;
 }
 
 export interface Question {
@@ -30,6 +33,9 @@ export interface Question {
 // "nodata" is not "nxdomain": the name exists, it simply has no record of the
 // type asked for. Conflating them tells the visitor a name is missing when it
 // is not, which an explainer about trust cannot afford to do.
+// "forged" and "rejected" are the same message with a different transaction
+// ID. That is the entire difference, and it is why they are two kinds rather
+// than one kind with a flag: the resolver's whole acceptance test is here.
 export type StepKind =
   | "query"
   | "referral"
@@ -37,7 +43,9 @@ export type StepKind =
   | "cname"
   | "nodata"
   | "nxdomain"
-  | "cached";
+  | "cached"
+  | "forged"
+  | "rejected";
 
 // One directed message on one edge. The animation plays these in order.
 // `zone` names which zone the far end is speaking for, so one graph node can
@@ -49,6 +57,9 @@ export interface ResolutionStep {
   records: DNSRecord[];
   note: string;
   zone?: string;
+  // The 16-bit number a reply has to quote to be believed. Carried on the
+  // step so the acceptance test can be shown rather than described.
+  txid?: number;
 }
 
 export interface ResolutionResult {
@@ -58,8 +69,9 @@ export interface ResolutionResult {
   answer: DNSRecord[];
 }
 
-// What a nameserver can say. It cannot say "cached" — only a resolver can.
+// What a nameserver can say. It cannot say "cached" — only a resolver can —
+// and "forged" is not a kind of answer, it is who sent one.
 export interface Response {
-  kind: Exclude<StepKind, "query" | "cached">;
+  kind: Exclude<StepKind, "query" | "cached" | "forged" | "rejected">;
   records: DNSRecord[];
 }

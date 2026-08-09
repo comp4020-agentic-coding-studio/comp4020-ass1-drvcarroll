@@ -43,6 +43,9 @@ export interface LevelConfig {
   // Cache state and TTL expiry cannot be observed from a browser, so a level
   // that teaches them uses the stored world and says so rather than pretending.
   simulated: boolean;
+  // Somebody is allowed to answer a question they were not asked. Simulated
+  // necessarily: a page that really did this would be committing the attack.
+  attack: boolean;
   zones: Zone[];
   knownNames: string[];
   defaultQuery: string;

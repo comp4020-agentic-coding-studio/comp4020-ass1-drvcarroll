@@ -1,3 +1,4 @@
+import { ATTACKER, type Forgery } from "./attack.js";
 import { answerFor, remember, startZone, type Cache } from "./cache.js";
 import { deepest, fqdn, isWithin } from "./names.js";
 import type {
@@ -71,8 +72,14 @@ export function respond(zone: Zone, q: Question): Response {
   };
 }
 
-function zoneNamed(zones: Zone[], origin: string): Zone | undefined {
-  return zones.find((z) => z.origin === origin);
+// Which server you go to is decided by the referral you were handed, not by
+// the zone's name. That distinction is invisible until two servers claim the
+// same zone — and then it is the difference between the real site and the
+// attacker's, so the resolver has to follow the nameserver it was told.
+function zoneNamed(zones: Zone[], origin: string, ns?: string): Zone | undefined {
+  const claiming = zones.filter((z) => z.origin === origin);
+  if (ns === undefined || claiming.length < 2) return claiming[0];
+  return claiming.find((z) => z.ns === ns) ?? claiming[0];
 }
 
 function describeReferral(records: DNSRecord[]): string {
@@ -119,6 +126,11 @@ export interface ResolveOptions {
   // reproducible in a test and steerable by the visitor.
   now?: number;
   client?: NodeId;
+  // Somebody else answering the question the resolver just asked. Returns
+  // undefined when nobody is attacking this particular query.
+  intercept?: (q: Question, zone: Zone, txid: number) => Forgery | undefined;
+  // Injected, so a test can pin every transaction ID the resolver picks.
+  txid?: () => number;
 }
 
 // The recursor's walk: start as far down the tree as it already knows about,
@@ -129,7 +141,7 @@ export function resolve(
   zones: Zone[],
   options: ResolveOptions = {},
 ): ResolutionResult {
-  const { cache, now = 0, client = STUB } = options;
+  const { cache, now = 0, client = STUB, intercept, txid } = options;
   const question: Question = { name: fqdn(q.name), type: q.type };
   const steps: ResolutionStep[] = [];
 
@@ -151,13 +163,13 @@ export function resolve(
   // which is the whole reason the root is barely touched in practice.
   const enter = (name: string): Zone | undefined => {
     const origin = cache === undefined ? "." : startZone(cache, name, now);
+    const held = cache?.get(`${origin}|NS`)?.records ?? [];
     if (origin !== ".") {
-      recall(
-        cache?.get(`${origin}|NS`)?.records ?? [],
-        `Already know who serves ${origin} — resuming there`,
-      );
+      recall(held, `Already know who serves ${origin} — resuming there`);
     }
-    return zoneNamed(zones, origin);
+    // Whichever nameserver the cached delegation names, including one the
+    // resolver was lied to about. A poisoned cache needs no other machinery.
+    return zoneNamed(zones, origin, held[0]?.data);
   };
 
   let zone = enter(question.name);
@@ -187,26 +199,47 @@ export function resolve(
       continue;
     }
 
-    const server = zone.server;
+    // The number the reply has to quote. Sixteen bits, chosen fresh per
+    // query, and the resolver's entire test of whether to believe an answer.
+    const id = txid?.();
 
     steps.push({
       from: RECURSOR,
-      to: server,
+      to: zone.server,
       kind: "query",
       records: [],
       note: `${current.type} record for ${current.name}?`,
       zone: zone.origin,
+      txid: id,
     });
 
-    const response = respond(zone, current);
+    // A forgery is not a special kind of response — it is a response from the
+    // wrong sender. Once believed it takes the identical path below: cached
+    // the same, followed the same, rendered the same. That is the attack.
+    const forgery =
+      id === undefined ? undefined : intercept?.(current, zone, id);
+    if (forgery !== undefined && !forgery.accepted) {
+      steps.push({
+        from: ATTACKER,
+        to: RECURSOR,
+        kind: "rejected",
+        records: forgery.response.records,
+        note: forgery.note,
+        txid: forgery.quoted,
+      });
+    }
+
+    const believed = forgery?.accepted === true;
+    const response = believed ? forgery.response : respond(zone, current);
     if (cache !== undefined) remember(cache, current, response, now);
     steps.push({
-      from: server,
+      from: believed ? ATTACKER : zone.server,
       to: RECURSOR,
-      kind: response.kind,
+      kind: believed ? "forged" : response.kind,
       records: response.records,
-      zone: zone.origin,
-      note: noteFor(response, current, zone.origin),
+      zone: believed ? undefined : zone.origin,
+      note: believed ? forgery.note : noteFor(response, current, zone.origin),
+      txid: believed ? forgery.quoted : id,
     });
 
     if (response.kind === "answer") {
@@ -230,8 +263,11 @@ export function resolve(
       continue;
     }
 
-    const nextOrigin = response.records[0]?.name;
-    zone = nextOrigin === undefined ? undefined : zoneNamed(zones, nextOrigin);
+    const referral = response.records[0];
+    zone =
+      referral === undefined
+        ? undefined
+        : zoneNamed(zones, referral.name, referral.data);
   }
 
   steps.push({

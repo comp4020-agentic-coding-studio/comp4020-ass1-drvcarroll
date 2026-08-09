@@ -12,7 +12,9 @@ export type Role =
   | "alias"
   | "denial"
   | "empty"
-  | "remembered";
+  | "remembered"
+  | "forged"
+  | "discarded";
 
 // What the record is doing in this message. The same NS record is a
 // delegation coming from a parent and an answer coming from the zone itself.
@@ -22,6 +24,10 @@ export function roleOf(kind: StepKind, record: DNSRecord): Role {
       return record.type === "NS" ? "delegation" : "glue";
     case "cached":
       return "remembered";
+    case "forged":
+      return "forged";
+    case "rejected":
+      return "discarded";
     case "cname":
       return "alias";
     case "nodata":
@@ -78,6 +84,10 @@ const ROLE_NOTE: Record<Role, string> = {
     "The name exists — this server is authoritative for it — but holds nothing of the type you asked for. That is NODATA, not NXDOMAIN, and the difference matters: the name is fine, your question was not.",
   remembered:
     "Out of the resolver's memory rather than off the network. Nothing was sent, nobody was asked, and it stays true only until the TTL runs out.",
+  forged:
+    "Written by someone who was never asked. It quoted the right transaction ID, so the resolver believed it — and once believed, it is cached and served exactly like any other record. Nothing downstream can tell the difference.",
+  discarded:
+    "The forgery arrived, and was thrown away. Not because it looked suspicious, but because one number did not match. That number is the whole of the resolver's defence.",
 };
 
 // Everything already explained in this run. Shared across a walk's steps so

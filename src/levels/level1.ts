@@ -151,6 +151,7 @@ export const LEVEL1: LevelConfig = {
   clients: ["stub"],
   caching: false,
   simulated: false,
+  attack: false,
   zones: ZONES,
   knownNames: KNOWN_NAMES,
   defaultQuery: DEFAULT_QUERY,

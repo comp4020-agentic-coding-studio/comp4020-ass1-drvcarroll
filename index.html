@@ -51,6 +51,34 @@
 
       <p data-type-note class="type-note" hidden></p>
 
+      <section class="threats" data-threats hidden aria-label="Attacker">
+        <div class="threat-head">
+          <h2>You are the attacker</h2>
+          <select id="threat" data-threat aria-label="Where you are standing">
+            <option value="off">Not attacking</option>
+            <option value="onpath">On-path — I can see the query</option>
+            <option value="offpath">Off-path — I have to guess</option>
+          </select>
+          <button data-forge type="button" disabled>
+            Send a forged reply
+          </button>
+        </div>
+        <div data-odds class="odds"></div>
+        <fieldset class="defences">
+          <legend>What the resolver does about it</legend>
+          <label>
+            <input type="checkbox" data-defence="ports" />
+            Source port randomisation
+            <span>the reply must match a port too, squaring the guess</span>
+          </label>
+          <label>
+            <input type="checkbox" data-defence="dnssec" />
+            DNSSEC validation
+            <span>records are signed, so a forgery fails even when it wins</span>
+          </label>
+        </fieldset>
+      </section>
+
       <div data-graph class="stage"></div>
 
       <section class="cache" data-cache hidden aria-label="Resolver cache">
@@ -141,6 +169,55 @@
           you make to a zone is not pushed anywhere — the world simply stops
           remembering the old answer, at a speed you chose in advance when you
           set the TTL.
+        </p>
+      </section>
+      <section class="notes" data-notes="l4" hidden>
+        <h2>The thing to notice</h2>
+        <p>
+          Every message so far has been believed on the strength of one thing:
+          a 16-bit number the resolver picked and the reply quoted back. There
+          is no signature, no password and no return address that cannot be
+          written by anyone. Pick <strong>on-path</strong> and resolve a name:
+          you can read that number off the wire, so you never guess, and you
+          win every time. The cost of this attack is not cleverness, it is
+          standing on the link — open wifi, a router, an ISP.
+        </p>
+        <p>
+          Now pick <strong>off-path</strong>, where you cannot see the query
+          and have to guess. Ask for <code>anu.edu.au</code> and you will
+          almost certainly lose — and then you have lost for good, because the
+          real answer is now cached and the next question never leaves the
+          resolver. One shot per name, then wait out the TTL.
+        </p>
+        <p>
+          So do not attack the name. Press
+          <strong>send a forged reply</strong>: it asks for a random
+          subdomain that nobody has ever looked up and nobody has cached, so
+          you get another attempt, and another. And do not forge the address —
+          forge the <strong>delegation</strong>. Win once and the resolver
+          believes you are the nameserver for the entire zone. This is
+          Kaminsky's attack, and the reason it works is level 3's reason: a
+          cache does not record where a record came from.
+        </p>
+        <p>
+          Then switch to the other machine and ask for
+          <code>anu.edu.au</code>. It has never been attacked, never spoken to
+          you, and it goes where you tell it — from a cache it never filled.
+          The efficiency argument of level 3, running in reverse: everything
+          that made one answer serve thousands of people makes one lie do the
+          same.
+        </p>
+        <p>
+          The defences are not decoration. <strong>Port randomisation</strong>
+          makes the reply match a port as well as an ID, squaring the search
+          space rather than doubling it — try the attack again and watch the
+          odds. <strong>DNSSEC</strong> is different in kind: the forgery still
+          arrives, still quotes the right ID, and is thrown out anyway, because
+          the records are signed and yours are not. And
+          <strong>DNS-over-HTTPS</strong>, which is what most people mean when
+          they say their DNS is encrypted, protects only the hop between your
+          machine and the resolver. Every hop in this diagram past the resolver
+          is exactly as it was.
         </p>
       </section>
     </main>

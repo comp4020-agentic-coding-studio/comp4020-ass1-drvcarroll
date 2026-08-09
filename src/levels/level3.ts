@@ -109,6 +109,7 @@ export const LEVEL3: LevelConfig = {
   clients: ["stub", "stub2"],
   caching: true,
   simulated: true,
+  attack: false,
   zones: LEVEL3_ZONES,
   knownNames: LEVEL3_NAMES,
   defaultQuery: "anu.edu.au",

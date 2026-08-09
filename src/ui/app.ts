@@ -1,5 +1,18 @@
+import {
+  DEMO_BITS,
+  NO_DEFENCES,
+  REAL_BITS,
+  SCALE,
+  forge,
+  realSpace,
+  space,
+  type AttackerConfig,
+  type Defences,
+  type Threat,
+} from "../dns/attack.js";
 import { entries, type Cache } from "../dns/cache.js";
 import { buildZones } from "../dns/live.js";
+import { isWithin } from "../dns/names.js";
 import { resolve } from "../dns/resolve.js";
 import type {
   DNSRecord,
@@ -14,10 +27,17 @@ import { createGraph } from "../graph/render.js";
 import { LEVEL1 } from "../levels/level1.js";
 import { LEVEL2 } from "../levels/level2.js";
 import { LEVEL3 } from "../levels/level3.js";
+import {
+  ATTACKER_IP,
+  ATTACKER_NS,
+  LEVEL4,
+  STOLEN_ZONE,
+  kaminskyName,
+} from "../levels/level4.js";
 import type { LevelConfig } from "../levels/types.js";
 import { cacheTable, glossFor, recordTable, type Seen } from "./records.js";
 
-const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2, LEVEL3];
+const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2, LEVEL3, LEVEL4];
 
 // Long enough that short TTLs visibly die and long ones visibly do not.
 const WAIT_STEP = 300;
@@ -30,6 +50,8 @@ const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   nodata: "No such record",
   nxdomain: "No such name",
   cached: "From cache",
+  forged: "Forged — believed",
+  rejected: "Forged — discarded",
 };
 
 const OUTCOME_NOTE: Record<ResolutionResult["outcome"], (q: string) => string> =
@@ -72,6 +94,16 @@ function connectionStep(
   ];
 }
 
+function line(text: string, state?: string): HTMLParagraphElement {
+  const p = document.createElement("p");
+  p.textContent = text;
+  if (state !== undefined) p.dataset.state = state;
+  return p;
+}
+
+const hex = (value: number): string =>
+  `0x${value.toString(16).toUpperCase().padStart(2, "0")}`;
+
 function stepRow(step: ResolutionStep, index: number, seen: Seen): HTMLLIElement {
   const row = document.createElement("li");
   row.className = "step";
@@ -86,6 +118,15 @@ function stepRow(step: ResolutionStep, index: number, seen: Seen): HTMLLIElement
   note.textContent = step.note;
 
   row.append(label, note);
+
+  // The acceptance test, shown as the number it actually is.
+  if (step.txid !== undefined) {
+    const id = document.createElement("span");
+    id.className = "step-txid";
+    id.textContent = hex(step.txid);
+    row.append(id);
+  }
+
   if (step.records.length > 0) {
     row.append(recordTable(step.records, step.kind, seen));
   }
@@ -99,6 +140,8 @@ const SOURCE_NOTE: Record<string, string> = {
     "The network did not answer, so this is a stored miniature internet. Only anu.edu.au and google.com exist in it.",
   simulated:
     "A stored miniature internet, deliberately. A browser cannot see inside a resolver's cache or make time pass, so this level simulates what the earlier ones fetched.",
+  attack:
+    "Simulated, and necessarily so: a page that really forged DNS replies would be committing the attack rather than explaining it. The mechanism is faithful; the transaction ID is deliberately smaller, and the panel says by how much.",
 };
 
 // A browser cannot observe referrals, so real zone data is fetched and the
@@ -109,7 +152,11 @@ async function zonesFor(
   type: RecordType,
   level: LevelConfig,
   cache: Map<string, Zone[]>,
-): Promise<{ zones: Zone[]; source: "live" | "fallback" | "simulated" }> {
+): Promise<{
+  zones: Zone[];
+  source: "live" | "fallback" | "simulated" | "attack";
+}> {
+  if (level.attack) return { zones: level.zones, source: "attack" };
   if (level.simulated) return { zones: level.zones, source: "simulated" };
   const key = `${name}|${type}`;
   const hit = cache.get(key);
@@ -137,8 +184,13 @@ export function start(): void {
   const held = document.querySelector<HTMLElement>("[data-cache-table]");
   const clock = document.querySelector<HTMLElement>("[data-clock]");
   const wait = document.querySelector<HTMLButtonElement>("[data-wait]");
+  const threats = document.querySelector<HTMLElement>("[data-threats]");
+  const threat = document.querySelector<HTMLSelectElement>("[data-threat]");
+  const fire = document.querySelector<HTMLButtonElement>("[data-forge]");
+  const odds = document.querySelector<HTMLElement>("[data-odds]");
   if (!stage || !nav || !form || !input || !picker || !typeNote) return;
   if (!log || !source || !who || !panel || !held || !clock || !wait) return;
+  if (!threats || !threat || !fire || !odds) return;
 
   let level = LEVELS[0] ?? LEVEL1;
   const graph = createGraph(stage, level);
@@ -148,6 +200,63 @@ export function start(): void {
   // to a lookup: what a cache is for is outliving the query that filled it.
   let cache: Cache = new Map();
   let now = 0;
+
+  // The attack is state too, and for the same reason: an attempt that lost is
+  // only meaningful next to the attempts before it.
+  let attempts = 0;
+  const defences: Defences = { ...NO_DEFENCES };
+
+  const draw = (): number => Math.floor(Math.random() * space(defences));
+
+  const attacker = (): AttackerConfig => ({
+    threat: threat.value as Threat,
+    defences,
+    zone: STOLEN_ZONE,
+    ns: ATTACKER_NS,
+    address: ATTACKER_IP,
+    guess: draw,
+  });
+
+  // Any name in the stolen zone is worth racing — that is the point of forging
+  // the delegation rather than an address. But only on a hop above the zone: a
+  // delegation for anu.edu.au is only credible from the servers above it, and
+  // once the resolver is already asking the attacker there is nothing to forge.
+  const armed = (name: string, zone: Zone): boolean =>
+    (name === STOLEN_ZONE || isWithin(name, STOLEN_ZONE)) &&
+    zone.origin !== STOLEN_ZONE;
+
+  // True once the resolver's memory names the attacker as the nameserver. No
+  // separate flag: being poisoned is a fact about the cache, not about a page.
+  const poisoned = (): boolean =>
+    cache.get(`${STOLEN_ZONE}|NS`)?.records[0]?.data === ATTACKER_NS;
+
+  const showThreat = (): void => {
+    if (!level.attack) return;
+    const one = space(defences);
+    const real = realSpace(defences);
+    const bits = defences.ports ? DEMO_BITS * 2 : DEMO_BITS;
+    const realBits = defences.ports ? REAL_BITS * 2 : REAL_BITS;
+    // On-path does not draw, so quoting odds at it would be a lie. The number
+    // that matters there is zero guesses, and the price is network position.
+    odds.replaceChildren(
+      line(
+        threat.value === "onpath"
+          ? "No guessing: the query is readable, so the ID is known. " +
+              "Entropy is not the defence against someone on the wire."
+          : `1 in ${String(one)} per attempt — ${String(bits)} bits here, ` +
+              `${String(realBits)} in real DNS, where it is 1 in ${real.toLocaleString()}.`,
+      ),
+      line(
+        attempts === 0
+          ? "No forged replies sent yet."
+          : `${String(attempts)} attempts here ≈ ${(attempts * SCALE).toLocaleString()} against a real resolver.`,
+      ),
+      ...(poisoned()
+        ? [line(`Poisoned. ${STOLEN_ZONE} now resolves through the attacker.`, "won")]
+        : []),
+    );
+    fire.disabled = threat.value === "off";
+  };
 
   const options = document.createElement("datalist");
   options.id = "known-names";
@@ -190,10 +299,21 @@ export function start(): void {
       ? sent(resolve({ name, type }, zones, { now }).steps)
       : 0;
 
+    // Only armed when a threat is selected, so level 4 with the attacker
+    // switched off is level 3 with one more node drawn on it.
+    const live = level.attack && threat.value !== "off";
     const result = resolve({ name, type }, zones, {
       cache: level.caching ? cache : undefined,
       now,
       client,
+      txid: level.attack ? draw : undefined,
+      intercept: live
+        ? (q, asked, id) => {
+            if (!armed(q.name, asked)) return undefined;
+            attempts += 1;
+            return forge(attacker(), q, id);
+          }
+        : undefined,
     });
     const steps = [...result.steps, ...connectionStep(result, level, client)];
 
@@ -227,6 +347,7 @@ export function start(): void {
           log.append(count);
           showCache();
         }
+        showThreat();
       },
     });
   };
@@ -309,6 +430,20 @@ export function start(): void {
     panel.hidden = !next.caching;
     showCache();
 
+    // A fresh resolver has never been lied to either, so the attempt count
+    // and the defences reset with it.
+    attempts = 0;
+    threat.value = "off";
+    defences.ports = false;
+    defences.dnssec = false;
+    for (const box of document.querySelectorAll<HTMLInputElement>(
+      "[data-defence]",
+    )) {
+      box.checked = false;
+    }
+    threats.hidden = !next.attack;
+    showThreat();
+
     for (const notes of document.querySelectorAll<HTMLElement>("[data-notes]")) {
       notes.hidden = notes.dataset.notes !== next.id;
     }
@@ -344,6 +479,29 @@ export function start(): void {
   wait.addEventListener("click", () => {
     now += WAIT_STEP;
     showCache();
+  });
+
+  threat.addEventListener("change", () => {
+    showThreat();
+    submit();
+  });
+
+  for (const box of document.querySelectorAll<HTMLInputElement>(
+    "[data-defence]",
+  )) {
+    box.addEventListener("change", () => {
+      const which = box.dataset.defence;
+      if (which === "ports") defences.ports = box.checked;
+      if (which === "dnssec") defences.dnssec = box.checked;
+      showThreat();
+    });
+  }
+
+  // A name nobody has cached, so the attacker gets another go. Attacking the
+  // real name gives you exactly one attempt before the true answer is cached
+  // and every later question is answered from memory without a race at all.
+  fire.addEventListener("click", () => {
+    void run(kaminskyName(attempts), "A", chosenClient());
   });
 
   apply(level);

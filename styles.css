@@ -10,6 +10,7 @@
   --cname: #7b3fbf;
   --deny: #c02a2a;
   --cached: #0f7d8a;
+  --forged: #c2119b;
 }
 
 * {
@@ -112,10 +113,23 @@ button:hover {
   background: var(--query);
 }
 
+/* Nothing to forge until you have chosen where you are standing. */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--muted);
+}
+
 .cache-head button {
   padding: 0.35rem 0.8rem;
   font-size: 0.85rem;
 }
+
+.threat-head button {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
 
 .levels button {
   padding: 0.4rem 0.9rem;
@@ -562,6 +576,125 @@ tr[data-role="empty"] .record-role {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* Level 4. A forgery has to look like a message, not like a warning sign —
+   the whole lesson is that the resolver cannot tell. So it gets its own
+   colour and nothing else: same shape, same table, same animation. */
+
+.node[data-state="forged"] .node-box {
+  stroke: var(--forged);
+  stroke-width: 3;
+}
+
+.node[data-state="rejected"] .node-box {
+  stroke: var(--forged);
+  stroke-dasharray: 4 3;
+}
+
+.speech-box[data-kind="forged"] {
+  color: var(--forged);
+}
+
+.speech-box[data-kind="rejected"] {
+  color: var(--muted);
+}
+
+.packet[data-kind="forged"] {
+  fill: var(--forged);
+}
+
+.packet[data-kind="rejected"] {
+  fill: var(--muted);
+}
+
+.step[data-kind="forged"] {
+  border-left-color: var(--forged);
+}
+
+/* Dashed: the packet arrived and went nowhere. */
+.step[data-kind="rejected"] {
+  border-left-color: var(--muted);
+  border-left-style: dashed;
+}
+
+/* The acceptance test, shown on the step that turned on it. */
+.step-txid {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+tr[data-role="forged"] .record-role {
+  color: var(--forged);
+}
+
+tr[data-role="discarded"] .record-role {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.threats {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem 1rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--forged);
+  border-radius: 12px;
+}
+
+.threat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.threat-head h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  font-size: 1.05rem;
+  color: var(--forged);
+}
+
+/* The arithmetic, kept on screen so the scaled ID space never passes as real. */
+.odds {
+  margin-top: 0.6rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.odds p {
+  margin: 0 0 0.15rem;
+}
+
+.odds p[data-state="won"] {
+  color: var(--forged);
+  font-weight: 700;
+}
+
+.defences {
+  margin: 0.8rem 0 0;
+  padding: 0.5rem 0.8rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.defences legend {
+  padding: 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.defences label {
+  display: block;
+  font-size: 0.88rem;
+  margin-top: 0.3rem;
+}
+
+.defences label span {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .notes {
