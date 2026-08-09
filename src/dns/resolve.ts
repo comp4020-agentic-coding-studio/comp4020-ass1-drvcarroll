@@ -60,8 +60,13 @@ export function respond(zone: Zone, q: Question): Response {
   );
   if (alias.length > 0) return { kind: "cname", records: alias };
 
+  // "No phone number" and "no such person" are different answers, and DNS
+  // says so: a name that exists with no record of this type is NODATA, and
+  // only a name the zone has never heard of is NXDOMAIN. Either way the SOA
+  // comes back, because either way the emptiness is what gets cached.
+  const exists = zone.records.some((r) => r.name === q.name);
   return {
-    kind: "nxdomain",
+    kind: exists ? "nodata" : "nxdomain",
     records: zone.records.filter((r) => r.type === "SOA"),
   };
 }
@@ -83,9 +88,27 @@ function noteFor(response: Response, q: Question, origin: string): string {
       return `Authoritative: ${response.records.map((r) => r.data).join(", ")}`;
     case "cname":
       return `${q.name} is really ${response.records[0]?.data ?? "?"} — start again`;
+    case "nodata":
+      return `${q.name} exists, but has no ${q.type} record`;
     case "nxdomain":
       return `No such name below ${origin}`;
   }
+}
+
+// What the resolver hands back to the client, which is the only message the
+// client ever sees — the whole walk is invisible from where it is standing.
+function finalNote(
+  q: Question,
+  outcome: ResolutionResult["outcome"],
+  answer: DNSRecord[],
+): string {
+  if (outcome === "answered") {
+    return `${q.name} is at ${answer.map((r) => r.data).join(", ")}`;
+  }
+  if (outcome === "nodata") {
+    return `${q.name} exists, but has no ${q.type} record`;
+  }
+  return `${q.name} does not exist`;
 }
 
 // Everything the walk needs beyond the zones themselves. All optional: a
@@ -191,7 +214,10 @@ export function resolve(
       answer = response.records;
       break;
     }
-    if (response.kind === "nxdomain") break;
+    if (response.kind === "nxdomain" || response.kind === "nodata") {
+      outcome = response.kind;
+      break;
+    }
 
     // An alias sends the recursor back to the root: it now has a different
     // name to find, and knows nothing about where that one lives.
@@ -211,12 +237,9 @@ export function resolve(
   steps.push({
     from: RECURSOR,
     to: client,
-    kind: outcome === "answered" ? "answer" : "nxdomain",
+    kind: outcome === "answered" ? "answer" : outcome,
     records: answer,
-    note:
-      outcome === "answered"
-        ? `${question.name} is at ${answer.map((r) => r.data).join(", ")}`
-        : `${question.name} is not in this miniature internet`,
+    note: finalNote(question, outcome, answer),
   });
 
   return { question, steps, outcome, answer };

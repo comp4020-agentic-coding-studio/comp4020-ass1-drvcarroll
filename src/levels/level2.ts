@@ -46,26 +46,23 @@ export const LEVEL2_EDGES: [string, string][] = [...EDGES, ["stub", "mail"]];
 
 export const LEVEL2_DEFERRED = new Set([...DEFERRED_EDGES, "stub:mail"]);
 
-// Records level 1 never surfaces. The alias is on a name of its own, so
-// nothing level 1 already taught changes meaning here.
+// Records level 1 never surfaces. The alias already lives in level 1's zone,
+// on www, so nothing level 1 taught changes meaning here — it only becomes
+// askable once a type picker exists.
 const EXTRA: Record<string, DNSRecord[]> = {
   "anu.edu.au.": [
     // A zone's apex NS set is the delegation, restated by the zone that owns
     // it. Asking for it is how you see the tree's own wiring.
     { name: "anu.edu.au.", type: "NS", ttl: 86400, data: "ns1.anu.edu.au." },
-    { name: "anu.edu.au.", type: "MX", ttl: 3600, data: "10 mail.anu.edu.au." },
-    { name: "mail.anu.edu.au.", type: "A", ttl: 3600, data: "130.56.65.20" },
+    { name: "anu.edu.au.", type: "NS", ttl: 86400, data: "una.anu.edu.au." },
+    { name: "una.anu.edu.au.", type: "A", ttl: 86400, data: "150.203.22.28" },
+    // The real exchange sits outside the zone entirely — mail for anu.edu.au
+    // is handled by Microsoft, which an invented mail.anu.edu.au would hide.
     {
-      name: "webmail.anu.edu.au.",
-      type: "CNAME",
-      ttl: 300,
-      data: "terra-web.anu.edu.au.",
-    },
-    {
-      name: "terra-web.anu.edu.au.",
-      type: "A",
-      ttl: 300,
-      data: "130.56.65.113",
+      name: "anu.edu.au.",
+      type: "MX",
+      ttl: 3600,
+      data: "10 anu-edu-au.mail.protection.outlook.com.",
     },
   ],
   "google.com.": [
@@ -75,7 +72,7 @@ const EXTRA: Record<string, DNSRecord[]> = {
       ttl: 300,
       data: "10 smtp.google.com.",
     },
-    { name: "smtp.google.com.", type: "A", ttl: 300, data: "142.250.70.27" },
+    { name: "smtp.google.com.", type: "A", ttl: 300, data: "74.125.68.26" },
   ],
 };
 
@@ -89,7 +86,6 @@ export const LEVEL2_ZONES: Zone[] = ZONES.map((zone) => ({
 export const LEVEL2_NAMES = [
   "www.anu.edu.au",
   "anu.edu.au",
-  "webmail.anu.edu.au",
   "www.google.com",
   "google.com",
 ];

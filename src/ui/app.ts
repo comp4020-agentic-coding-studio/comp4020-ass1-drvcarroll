@@ -27,9 +27,18 @@ const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   referral: "Referral",
   answer: "Answer",
   cname: "Alias",
+  nodata: "No such record",
   nxdomain: "No such name",
   cached: "From cache",
 };
+
+const OUTCOME_NOTE: Record<ResolutionResult["outcome"], (q: string) => string> =
+  {
+    answered: (q) => `Resolved ${q}.`,
+    // Said plainly, because "does not exist" here would simply be false.
+    nodata: (q) => `${q} exists. It just has no record of that type.`,
+    nxdomain: (q) => `${q} does not exist.`,
+  };
 
 // A message only counts as sent if it crossed an edge. A cached step has the
 // resolver at both ends, which is precisely why it costs nothing.
@@ -207,7 +216,7 @@ export function start(): void {
         summary.textContent =
           result.outcome === "answered"
             ? `Resolved in ${String(result.steps.length)} messages — and your machine sent only one of them.`
-            : `${result.question.name} does not exist.`;
+            : OUTCOME_NOTE[result.outcome](result.question.name);
         log.append(summary);
 
         if (level.caching) {

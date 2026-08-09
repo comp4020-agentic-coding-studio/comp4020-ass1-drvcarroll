@@ -58,11 +58,11 @@ describe("level 3 extends level 2's world without rewriting it", () => {
 describe("the cache is the resolver's, not the client's", () => {
   it("serves the second machine from what the first one caused", () => {
     const cache: Cache = new Map();
-    resolve({ name: "www.anu.edu.au", type: "A" }, LEVEL3_ZONES, {
+    resolve({ name: "anu.edu.au", type: "A" }, LEVEL3_ZONES, {
       cache,
       client: "stub",
     });
-    const other = resolve({ name: "www.anu.edu.au", type: "A" }, LEVEL3_ZONES, {
+    const other = resolve({ name: "anu.edu.au", type: "A" }, LEVEL3_ZONES, {
       cache,
       client: "stub2",
     });

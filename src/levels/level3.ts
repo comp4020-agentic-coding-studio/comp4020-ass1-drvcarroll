@@ -62,15 +62,19 @@ const UNSW: Zone = {
   origin: "unsw.edu.au.",
   server: "auth",
   records: [
-    { name: "www.unsw.edu.au.", type: "A", ttl: 3600, data: "149.171.96.60" },
-    { name: "unsw.edu.au.", type: "A", ttl: 3600, data: "149.171.96.60" },
-    { name: "unsw.edu.au.", type: "SOA", ttl: 3600, data: "ns1.unsw.edu.au." },
+    { name: "unsw.edu.au.", type: "A", ttl: 3600, data: "18.67.93.67" },
+    {
+      name: "unsw.edu.au.",
+      type: "SOA",
+      ttl: 3600,
+      data: "ddi-master.net.unsw.edu.au.",
+    },
   ],
 };
 
 const UNSW_DELEGATION: DNSRecord[] = [
-  { name: "unsw.edu.au.", type: "NS", ttl: 86400, data: "ns1.unsw.edu.au." },
-  { name: "ns1.unsw.edu.au.", type: "A", ttl: 86400, data: "149.171.96.1" },
+  { name: "unsw.edu.au.", type: "NS", ttl: 86400, data: "ns1-ext.unsw.edu.au." },
+  { name: "ns1-ext.unsw.edu.au.", type: "A", ttl: 86400, data: "54.79.80.189" },
 ];
 
 export const LEVEL3_ZONES: Zone[] = [
@@ -82,12 +86,13 @@ export const LEVEL3_ZONES: Zone[] = [
   UNSW,
 ];
 
-// Ordered as a demonstration: resolve the first, then the second is a full
-// hit, then the third skips root and TLD, then the fourth skips only the root.
+// Ordered as a demonstration: resolve the first, ask it again for a full hit,
+// then the second skips root and TLD, the third skips only the root, and the
+// fourth is a cold walk again under a TLD nothing has touched.
 export const LEVEL3_NAMES = [
-  "www.anu.edu.au",
-  "mail.anu.edu.au",
-  "www.unsw.edu.au",
+  "anu.edu.au",
+  "terra-web.anu.edu.au",
+  "unsw.edu.au",
   "www.google.com",
 ];
 
@@ -106,5 +111,5 @@ export const LEVEL3: LevelConfig = {
   simulated: true,
   zones: LEVEL3_ZONES,
   knownNames: LEVEL3_NAMES,
-  defaultQuery: "www.anu.edu.au",
+  defaultQuery: "anu.edu.au",
 };

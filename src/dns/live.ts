@@ -143,6 +143,25 @@ function seatFor(index: number, total: number): string {
   return index === 1 ? "tld" : "auth";
 }
 
+// NXDOMAIN, so the name is genuinely absent rather than merely quiet.
+const NXDOMAIN_STATUS = 3;
+
+// An empty answer is ambiguous: the name may not exist, or it may exist with
+// nothing of the type asked for. The status tells them apart, and the walk
+// can only tell them apart if the zone holds something owned by the name —
+// so when the server says the name is fine, go and fetch what it does have.
+async function existenceProof(
+  response: DohResponse,
+  target: string,
+  type: RecordType,
+  fetchJson: FetchJson,
+): Promise<DNSRecord[]> {
+  const empty = (response.Answer ?? []).length === 0;
+  if (!empty || response.Status === NXDOMAIN_STATUS) return [];
+  const held = type === "A" ? "SOA" : "A";
+  return toRecords(await fetchJson(query(target, held)), held);
+}
+
 export async function buildZones(
   name: string,
   type: RecordType = "A",
@@ -161,6 +180,7 @@ export async function buildZones(
   // of the zone that denied the name, which is what sets the negative TTL.
   const aliases = type === "CNAME" ? [] : toRecords(response, "CNAME");
   const denial = toRecords(response, "SOA", "Authority");
+  const proof = await existenceProof(response, target, type, fetchJson);
 
   const zones: Zone[] = [];
   for (const [index, origin] of cuts.entries()) {
@@ -168,7 +188,7 @@ export async function buildZones(
     const delegation = child === undefined ? [] : (delegations.get(child) ?? []);
     const records =
       child === undefined
-        ? [...answers, ...aliases, ...denial]
+        ? [...answers, ...aliases, ...denial, ...proof]
         : [...delegation, ...(await glueFor(delegation, fetchJson))];
 
     zones.push({ origin, server: seatFor(index, cuts.length), records });

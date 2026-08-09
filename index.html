@@ -113,9 +113,9 @@
       <section class="notes" data-notes="l3" hidden>
         <h2>The thing to notice</h2>
         <p>
-          Ask for <code>www.anu.edu.au</code>, then ask again. The second time
+          Ask for <code>anu.edu.au</code>, then ask again. The second time
           nothing leaves the resolver at all. Now ask for
-          <code>mail.anu.edu.au</code> — a name it has never seen — and watch
+          <code>terra-web.anu.edu.au</code> — a name it has never seen — and watch
           where the walk <strong>starts</strong>. The root is not asked. The
           TLD is not asked. The resolver already knew who serves
           <code>anu.edu.au</code>, because it cached the
@@ -123,7 +123,7 @@
         </p>
         <p>
           That is the whole reason the thirteen root servers can carry the
-          internet. Then try <code>www.unsw.edu.au</code>: a different zone
+          internet. Then try <code>unsw.edu.au</code>: a different zone
           under the same TLD, so the root is still skipped but the TLD has to
           be asked. The saving is partial, and it is proportional to what was
           already known.

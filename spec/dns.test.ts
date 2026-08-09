@@ -12,7 +12,9 @@ const zoneOf = (origin: string): Zone => {
   return zone;
 };
 
-const QUERY = { name: "www.anu.edu.au.", type: "A" } as const;
+// The apex, because www really is an alias: a plain walk needs a name that
+// ends in an address rather than in another name.
+const QUERY = { name: "anu.edu.au.", type: "A" } as const;
 
 describe("a nameserver answers, refers, or denies — never looks things up", () => {
   it("refers to the TLD when asked about a name it does not serve", () => {
@@ -54,7 +56,7 @@ describe("the recursor walks the tree, the client does not", () => {
 
   it("resolves to the authoritative address", () => {
     expect(result.outcome).toBe("answered");
-    expect(result.answer[0]?.data).toBe("149.171.96.10");
+    expect(result.answer[0]?.data).toBe("130.56.67.33");
   });
 
   it("asks the client exactly one question and gives it one answer", () => {
@@ -87,7 +89,7 @@ describe("the recursor walks the tree, the client does not", () => {
   it("resolves a name under a different TLD", () => {
     const result = resolve({ name: "www.google.com", type: "A" }, ZONES);
     expect(result.outcome).toBe("answered");
-    expect(result.answer[0]?.data).toBe("142.250.70.196");
+    expect(result.answer[0]?.data).toBe("142.251.151.119");
   });
 
   it("reuses the one TLD seat for whichever zone is being asked", () => {
@@ -107,8 +109,8 @@ describe("the recursor walks the tree, the client does not", () => {
   });
 });
 
-// A small world of its own: level 1's zones are deliberately alias-free, so
-// the CNAME behaviour is pinned here rather than by changing what L1 teaches.
+// A small world of its own, so the awkward cases — a chain, a loop — can be
+// pinned without inventing names in a world that is otherwise all real.
 const ALIAS_ZONES: Zone[] = [
   {
     origin: ".",

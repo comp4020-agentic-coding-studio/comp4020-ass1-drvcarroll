@@ -277,6 +277,10 @@ button:hover {
   stroke: var(--deny);
 }
 
+.node[data-state="nodata"] .node-box {
+  stroke: var(--muted);
+}
+
 /* The conversation, left standing on the graph: who said what, and when.
    Bottom-aligned in its slot so the box grows upward out of the node. */
 
@@ -325,6 +329,10 @@ button:hover {
   color: var(--cached);
 }
 
+.speech-box[data-kind="nodata"] {
+  color: var(--muted);
+}
+
 .packet {
   fill: var(--query);
 }
@@ -348,6 +356,10 @@ button:hover {
 /* A cached step has the resolver at both ends, so the packet sits still. */
 .packet[data-kind="cached"] {
   fill: var(--cached);
+}
+
+.packet[data-kind="nodata"] {
+  fill: var(--muted);
 }
 
 /* Log */
@@ -393,6 +405,11 @@ button:hover {
 
 .step[data-kind="cached"] {
   border-left-color: var(--cached);
+}
+
+/* NODATA is not a denial of the name, so it does not read as one. */
+.step[data-kind="nodata"] {
+  border-left-color: var(--muted);
 }
 
 .step-label {
@@ -478,6 +495,10 @@ tr[data-role="denial"] .record-role {
 
 tr[data-role="remembered"] .record-role {
   color: var(--cached);
+}
+
+tr[data-role="empty"] .record-role {
+  color: var(--muted);
 }
 
 /* Said once, where it first matters, then never again in this walk. */

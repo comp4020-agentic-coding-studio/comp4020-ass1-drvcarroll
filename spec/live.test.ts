@@ -73,6 +73,19 @@ const WORLD: Record<string, DohResponse> = {
       },
     ],
   },
+  // NOERROR with nothing in it: the name is fine, the type is not. This is
+  // the shape anu.edu.au really returns for CNAME.
+  "anu.edu.au.|CNAME": {
+    Status: 0,
+    Authority: [
+      {
+        name: "anu.edu.au.",
+        type: SOA,
+        TTL: 900,
+        data: "anugm.anu.edu.au. hostmaster.anu.edu.au. 1 2 3 4 900",
+      },
+    ],
+  },
   // A denial carries no answer — only the SOA of the zone that denied it.
   "nope.anu.edu.au.|A": {
     Status: 3,
@@ -185,6 +198,19 @@ describe("real delegation data rebuilds the walk", () => {
         .filter((s) => s.kind === "query" && s.from === RECURSOR)
         .map((s) => s.to),
     ).toEqual(["root", "tld", "auth", "auth"]);
+  });
+
+  // An empty answer alone cannot tell the two apart, so the builder goes and
+  // fetches something the name does hold. Without that proof the zone looks
+  // empty and the walk reports a name that plainly exists as missing.
+  it("distinguishes an empty answer from a name that does not exist", async () => {
+    const { zones } = await buildZones("anu.edu.au", "CNAME", fakeFetch);
+    const result = resolve({ name: "anu.edu.au", type: "CNAME" }, zones);
+
+    expect(result.outcome).toBe("nodata");
+    expect(zones.at(-1)?.records).toContainEqual(
+      expect.objectContaining({ name: "anu.edu.au.", type: "A" }),
+    );
   });
 
   // The SOA arrives in the Authority section, never the Answer, and its

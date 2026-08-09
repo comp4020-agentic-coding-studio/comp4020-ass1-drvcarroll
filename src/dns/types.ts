@@ -27,11 +27,15 @@ export interface Question {
 // graph render them differently — STRUCTURE.md concept 3.
 // "cached" is the resolver answering itself: from and to are both the
 // resolver, which is exactly the picture — the message never left.
+// "nodata" is not "nxdomain": the name exists, it simply has no record of the
+// type asked for. Conflating them tells the visitor a name is missing when it
+// is not, which an explainer about trust cannot afford to do.
 export type StepKind =
   | "query"
   | "referral"
   | "answer"
   | "cname"
+  | "nodata"
   | "nxdomain"
   | "cached";
 
@@ -50,7 +54,7 @@ export interface ResolutionStep {
 export interface ResolutionResult {
   question: Question;
   steps: ResolutionStep[];
-  outcome: "answered" | "nxdomain";
+  outcome: "answered" | "nodata" | "nxdomain";
   answer: DNSRecord[];
 }
 

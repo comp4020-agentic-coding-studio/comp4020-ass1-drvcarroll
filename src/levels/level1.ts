@@ -54,13 +54,16 @@ export const DEFERRED_EDGES = new Set(["stub:origin"]);
 
 // A miniature internet. Each zone knows only its own records and who it
 // delegates to — no server here holds a complete picture, which is the point.
+// Every record below was checked against the real DNS: this world is a
+// smaller internet, not an invented one, so nothing here teaches a name or an
+// address that would fall over the moment somebody looked it up.
 export const ZONES: Zone[] = [
   {
     origin: ".",
     server: "root",
     records: [
-      { name: "au.", type: "NS", ttl: 172800, data: "ns1.au." },
-      { name: "ns1.au.", type: "A", ttl: 172800, data: "203.119.40.1" },
+      { name: "au.", type: "NS", ttl: 172800, data: "s.au." },
+      { name: "s.au.", type: "A", ttl: 172800, data: "65.22.198.1" },
       { name: "com.", type: "NS", ttl: 172800, data: "a.gtld-servers.net." },
       {
         name: "a.gtld-servers.net.",
@@ -76,8 +79,8 @@ export const ZONES: Zone[] = [
     server: "tld",
     records: [
       { name: "anu.edu.au.", type: "NS", ttl: 86400, data: "ns1.anu.edu.au." },
-      { name: "ns1.anu.edu.au.", type: "A", ttl: 86400, data: "130.56.111.10" },
-      { name: "au.", type: "SOA", ttl: 86400, data: "ns1.au." },
+      { name: "ns1.anu.edu.au.", type: "A", ttl: 86400, data: "150.203.1.10" },
+      { name: "au.", type: "SOA", ttl: 86400, data: "s.au." },
     ],
   },
   {
@@ -93,17 +96,30 @@ export const ZONES: Zone[] = [
     origin: "anu.edu.au.",
     server: "auth",
     records: [
-      { name: "www.anu.edu.au.", type: "A", ttl: 3600, data: "149.171.96.10" },
-      { name: "anu.edu.au.", type: "A", ttl: 3600, data: "149.171.96.10" },
-      { name: "anu.edu.au.", type: "SOA", ttl: 3600, data: "ns1.anu.edu.au." },
+      // www really is an alias, and the resolver really does hide the hop
+      // when you only ask for an address.
+      {
+        name: "www.anu.edu.au.",
+        type: "CNAME",
+        ttl: 300,
+        data: "terra-web.anu.edu.au.",
+      },
+      {
+        name: "terra-web.anu.edu.au.",
+        type: "A",
+        ttl: 300,
+        data: "130.56.67.33",
+      },
+      { name: "anu.edu.au.", type: "A", ttl: 3600, data: "130.56.67.33" },
+      { name: "anu.edu.au.", type: "SOA", ttl: 3600, data: "anugm.anu.edu.au." },
     ],
   },
   {
     origin: "google.com.",
     server: "auth",
     records: [
-      { name: "www.google.com.", type: "A", ttl: 300, data: "142.250.70.196" },
-      { name: "google.com.", type: "A", ttl: 300, data: "142.250.70.196" },
+      { name: "www.google.com.", type: "A", ttl: 300, data: "142.251.151.119" },
+      { name: "google.com.", type: "A", ttl: 300, data: "142.250.183.46" },
       { name: "google.com.", type: "SOA", ttl: 900, data: "ns1.google.com." },
     ],
   },
@@ -117,7 +133,9 @@ export const KNOWN_NAMES = [
   "google.com",
 ];
 
-export const DEFAULT_QUERY = "www.anu.edu.au";
+// The apex, not www: www is genuinely an alias, and level 1 has not yet
+// earned the restart that an alias forces. www stays offered, not assumed.
+export const DEFAULT_QUERY = "anu.edu.au";
 
 // L1 asks one question only — "where is this?" — so it offers no type picker.
 export const LEVEL1: LevelConfig = {

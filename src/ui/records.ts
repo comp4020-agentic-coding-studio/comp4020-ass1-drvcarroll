@@ -11,6 +11,7 @@ export type Role =
   | "answer"
   | "alias"
   | "denial"
+  | "empty"
   | "remembered";
 
 // What the record is doing in this message. The same NS record is a
@@ -23,6 +24,8 @@ export function roleOf(kind: StepKind, record: DNSRecord): Role {
       return "remembered";
     case "cname":
       return "alias";
+    case "nodata":
+      return "empty";
     case "nxdomain":
       return "denial";
     default:
@@ -71,6 +74,8 @@ const ROLE_NOTE: Record<Role, string> = {
     "The name you asked about is a signpost, not a destination. The resolver drops its progress and starts again at the root.",
   denial:
     "No such name. The SOA is what gets cached, so the absence is remembered exactly as an answer would be.",
+  empty:
+    "The name exists — this server is authoritative for it — but holds nothing of the type you asked for. That is NODATA, not NXDOMAIN, and the difference matters: the name is fine, your question was not.",
   remembered:
     "Out of the resolver's memory rather than off the network. Nothing was sent, nobody was asked, and it stays true only until the TTL runs out.",
 };

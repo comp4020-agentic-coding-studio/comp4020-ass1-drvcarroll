@@ -54,16 +54,27 @@ describe("the type decides what comes back", () => {
   it("returns a mail exchanger, priority and all, for MX", () => {
     const result = resolve({ name: "anu.edu.au", type: "MX" }, LEVEL2_ZONES);
     expect(result.outcome).toBe("answered");
-    expect(result.answer[0]?.data).toBe("10 mail.anu.edu.au.");
+    expect(result.answer[0]?.data).toBe(
+      "10 anu-edu-au.mail.protection.outlook.com.",
+    );
   });
 
   it("restarts the walk when the answer is an alias", () => {
     const result = resolve(
-      { name: "webmail.anu.edu.au", type: "A" },
+      { name: "www.anu.edu.au", type: "A" },
       LEVEL2_ZONES,
     );
     expect(result.steps.filter((s) => s.kind === "cname")).toHaveLength(1);
-    expect(result.answer[0]?.data).toBe("130.56.65.113");
+    expect(result.answer[0]?.data).toBe("130.56.67.33");
+  });
+
+  // The distinction the real anu.edu.au forced: it has no CNAME, and saying
+  // it does not exist would be a different and false claim.
+  it("says NODATA, not NXDOMAIN, for a name with no record of that type", () => {
+    const result = resolve({ name: "anu.edu.au", type: "CNAME" }, LEVEL2_ZONES);
+    expect(result.outcome).toBe("nodata");
+    const empty = result.steps.find((s) => s.kind === "nodata");
+    expect(empty?.records.some((r) => r.type === "SOA")).toBe(true);
   });
 
   it("hands back the SOA when the name does not exist", () => {
