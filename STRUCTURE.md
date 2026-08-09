@@ -206,6 +206,32 @@ at zero and the bundle tiny, and SVG nodes are real DOM elements — which is wh
 makes keyboard access and the `data-testid` hooks natural rather than bolted on.
 The marker tabs through the page; that's not a detail to retrofit.
 
+## Where the data comes from
+
+L1 uses **real delegation data, on a reconstructed walk**. The visitor can type
+any real domain; the app asks a DNS-over-HTTPS resolver which suffixes of that
+name are zone cuts, and builds the zone tree from the NS, glue and A records it
+gets back. The nameserver names, addresses and TTLs on screen are genuine.
+
+The *sequence* is not observed, and the page says so. A browser cannot watch a
+referral: DoH hands back a recursor's final answer with the walk already
+discarded, which is precisely the thing L1 exists to make visible. Claiming
+otherwise in an explainer about who you have to trust would be the wrong lie to
+tell.
+
+Two consequences fall out of this:
+
+- **The canned world stays.** Any network failure falls back to the stored
+  zones, with a visible note saying which one you are looking at. The artefact
+  is marked live from a URL; a page that needs the network to teach anything is
+  a page that can fail at the crit.
+- **L3 and L4 stay simulated, necessarily.** Cache state, TTL expiry, transaction
+  IDs and forged responses are not observable from a browser at all, and half of
+  L4 would be an attack if it were.
+
+`resolve()` takes its zones as a parameter, so live and canned data are the same
+shape and the protocol tests never touch the network.
+
 ## Testability
 
 Mechanically checkable, and therefore ours to assert in `spec/`:

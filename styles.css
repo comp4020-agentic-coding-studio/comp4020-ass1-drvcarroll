@@ -107,6 +107,23 @@ button:hover {
   margin: 0.5rem 0 0;
 }
 
+/* Says where the data came from. An explainer about trust cannot overclaim. */
+.source {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--line);
+}
+
+.source[data-state="live"] {
+  border-left-color: var(--answer);
+}
+
+.source[data-state="fallback"] {
+  border-left-color: var(--referral);
+}
+
 /* Graph */
 
 .stage {

@@ -36,8 +36,12 @@
           <button data-testid="interaction" type="submit">Resolve</button>
         </div>
         <p id="lookup-hint" class="hint">
-          Try <code>www.anu.edu.au</code>, or a name that does not exist.
+          Any real domain. A name that does not exist genuinely returns
+          <code>NXDOMAIN</code> — try one and watch where the walk stops. Names
+          are shown fully qualified, with the trailing root dot that DNS really
+          uses and nobody ever types.
         </p>
+        <p data-source class="source"></p>
       </form>
 
       <div data-graph class="stage"></div>
