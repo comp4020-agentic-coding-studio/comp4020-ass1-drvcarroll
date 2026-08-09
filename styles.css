@@ -9,6 +9,7 @@
   --answer: #0f8a4f;
   --cname: #7b3fbf;
   --deny: #c02a2a;
+  --cached: #0f7d8a;
 }
 
 * {
@@ -109,6 +110,11 @@ button {
 
 button:hover {
   background: var(--query);
+}
+
+.cache-head button {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
 }
 
 .levels button {
@@ -315,6 +321,10 @@ button:hover {
   color: var(--deny);
 }
 
+.speech-box[data-kind="cached"] {
+  color: var(--cached);
+}
+
 .packet {
   fill: var(--query);
 }
@@ -333,6 +343,11 @@ button:hover {
 
 .packet[data-kind="nxdomain"] {
   fill: var(--deny);
+}
+
+/* A cached step has the resolver at both ends, so the packet sits still. */
+.packet[data-kind="cached"] {
+  fill: var(--cached);
 }
 
 /* Log */
@@ -374,6 +389,10 @@ button:hover {
 
 .step[data-kind="nxdomain"] {
   border-left-color: var(--deny);
+}
+
+.step[data-kind="cached"] {
+  border-left-color: var(--cached);
 }
 
 .step-label {
@@ -457,6 +476,10 @@ tr[data-role="denial"] .record-role {
   color: var(--deny);
 }
 
+tr[data-role="remembered"] .record-role {
+  color: var(--cached);
+}
+
 /* Said once, where it first matters, then never again in this walk. */
 .record-annotation td {
   padding: 0.1rem 0 0.6rem;
@@ -476,6 +499,48 @@ tr[data-role="denial"] .record-role {
 .summary {
   margin-top: 1rem;
   font-weight: 600;
+}
+
+/* Efficiency as a number rather than an adjective. */
+.tally {
+  margin: 0.2rem 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--cached);
+}
+
+/* The resolver's memory, which the graph can only show the effects of. */
+
+.cache {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.cache-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cache-head h2 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.clock {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.cache-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .notes {

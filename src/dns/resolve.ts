@@ -1,3 +1,5 @@
+import { answerFor, remember, startZone, type Cache } from "./cache.js";
+import { deepest, fqdn, isWithin } from "./names.js";
 import type {
   DNSRecord,
   NodeId,
@@ -13,23 +15,6 @@ export const RECURSOR: NodeId = "recursor";
 
 const MAX_HOPS = 10;
 
-// Names are fully qualified internally: "www.anu.edu.au." with the root dot.
-export function fqdn(name: string): string {
-  return name.endsWith(".") ? name : `${name}.`;
-}
-
-function labelCount(name: string): number {
-  return name === "." ? 0 : fqdn(name).split(".").filter(Boolean).length;
-}
-
-// "anu.edu.au." is within "au." and within "."; nothing is within itself.
-// The match is on whole labels — "fooau." is not inside "au.".
-function isWithin(name: string, origin: string): boolean {
-  if (name === origin) return false;
-  if (origin === ".") return true;
-  return name.endsWith(`.${origin}`);
-}
-
 // The delegation a zone holds for the deepest child enclosing the question.
 function findDelegation(zone: Zone, name: string): DNSRecord[] {
   const owners = zone.records
@@ -37,12 +22,9 @@ function findDelegation(zone: Zone, name: string): DNSRecord[] {
     .map((r) => r.name)
     .filter((owner) => owner === name || isWithin(name, owner));
 
-  if (owners.length === 0) return [];
-
-  const deepest = owners.reduce((best, owner) =>
-    labelCount(owner) > labelCount(best) ? owner : best,
-  );
-  return zone.records.filter((r) => r.type === "NS" && r.name === deepest);
+  const owner = deepest(owners);
+  if (owner === undefined) return [];
+  return zone.records.filter((r) => r.type === "NS" && r.name === owner);
 }
 
 // Glue: the parent must ship addresses for nameservers inside the child zone,
@@ -106,21 +88,56 @@ function noteFor(response: Response, q: Question, origin: string): string {
   }
 }
 
-// The recursor's walk: start at the root and follow referrals until some
-// server is authoritative. The client never does any of this.
-export function resolve(q: Question, zones: Zone[]): ResolutionResult {
+// Everything the walk needs beyond the zones themselves. All optional: a
+// resolver with no memory and no notion of time is exactly level 1.
+export interface ResolveOptions {
+  cache?: Cache;
+  // Seconds, supplied rather than read from the clock, so expiry is
+  // reproducible in a test and steerable by the visitor.
+  now?: number;
+  client?: NodeId;
+}
+
+// The recursor's walk: start as far down the tree as it already knows about,
+// and follow referrals until some server is authoritative. The client never
+// does any of this.
+export function resolve(
+  q: Question,
+  zones: Zone[],
+  options: ResolveOptions = {},
+): ResolutionResult {
+  const { cache, now = 0, client = STUB } = options;
   const question: Question = { name: fqdn(q.name), type: q.type };
   const steps: ResolutionStep[] = [];
 
   steps.push({
-    from: STUB,
+    from: client,
     to: RECURSOR,
     kind: "query",
     records: [],
     note: `Where is ${question.name}? (${question.type})`,
   });
 
-  let zone = zoneNamed(zones, ".");
+  // A message the resolver sends to itself: same node at both ends, so the
+  // packet visibly goes nowhere.
+  const recall = (records: DNSRecord[], note: string): void => {
+    steps.push({ from: RECURSOR, to: RECURSOR, kind: "cached", records, note });
+  };
+
+  // Where the walk can start. Anything above a cached delegation is skipped,
+  // which is the whole reason the root is barely touched in practice.
+  const enter = (name: string): Zone | undefined => {
+    const origin = cache === undefined ? "." : startZone(cache, name, now);
+    if (origin !== ".") {
+      recall(
+        cache?.get(`${origin}|NS`)?.records ?? [],
+        `Already know who serves ${origin} — resuming there`,
+      );
+    }
+    return zoneNamed(zones, origin);
+  };
+
+  let zone = enter(question.name);
   let outcome: ResolutionResult["outcome"] = "nxdomain";
   let answer: DNSRecord[] = [];
 
@@ -130,6 +147,23 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
   const seen = new Set<string>([question.name]);
 
   for (let hop = 0; hop < MAX_HOPS && zone !== undefined; hop += 1) {
+    const hit = cache === undefined ? undefined : answerFor(cache, current, now);
+    if (hit !== undefined) {
+      recall(hit.records, `${current.name} is already known — nothing is sent`);
+      if (hit.kind === "answer") {
+        outcome = "answered";
+        answer = hit.records;
+        break;
+      }
+      if (hit.kind === "nxdomain") break;
+      const known = hit.records[0]?.data;
+      if (known === undefined || seen.has(known)) break;
+      seen.add(known);
+      current = { name: known, type: current.type };
+      zone = enter(known);
+      continue;
+    }
+
     const server = zone.server;
 
     steps.push({
@@ -142,6 +176,7 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
     });
 
     const response = respond(zone, current);
+    if (cache !== undefined) remember(cache, current, response, now);
     steps.push({
       from: server,
       to: RECURSOR,
@@ -165,7 +200,7 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
       if (alias === undefined || seen.has(alias)) break;
       seen.add(alias);
       current = { name: alias, type: current.type };
-      zone = zoneNamed(zones, ".");
+      zone = enter(alias);
       continue;
     }
 
@@ -175,7 +210,7 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
 
   steps.push({
     from: RECURSOR,
-    to: STUB,
+    to: client,
     kind: outcome === "answered" ? "answer" : "nxdomain",
     records: answer,
     note:

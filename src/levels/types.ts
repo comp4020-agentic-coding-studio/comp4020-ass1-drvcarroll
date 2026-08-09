@@ -1,4 +1,4 @@
-import type { RecordType, Zone } from "../dns/types.js";
+import type { NodeId, RecordType, Zone } from "../dns/types.js";
 
 export interface Point {
   x: number;
@@ -35,6 +35,14 @@ export interface LevelConfig {
   // What a resolved record actually lets you reach. A type absent here ends
   // the walk with nothing to connect to, which is true of NS and SOA.
   destinations: Partial<Record<RecordType, string>>;
+  // Who may ask. More than one machine means the resolver is shared
+  // infrastructure, and so is everything it remembers.
+  clients: NodeId[];
+  // The resolver keeps what it learns between lookups.
+  caching: boolean;
+  // Cache state and TTL expiry cannot be observed from a browser, so a level
+  // that teaches them uses the stored world and says so rather than pretending.
+  simulated: boolean;
   zones: Zone[];
   knownNames: string[];
   defaultQuery: string;

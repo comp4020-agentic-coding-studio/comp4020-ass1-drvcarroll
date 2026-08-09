@@ -25,7 +25,15 @@ export interface Question {
 
 // A referral is not an answer. Keeping them distinct here is what lets the
 // graph render them differently — STRUCTURE.md concept 3.
-export type StepKind = "query" | "referral" | "answer" | "cname" | "nxdomain";
+// "cached" is the resolver answering itself: from and to are both the
+// resolver, which is exactly the picture — the message never left.
+export type StepKind =
+  | "query"
+  | "referral"
+  | "answer"
+  | "cname"
+  | "nxdomain"
+  | "cached";
 
 // One directed message on one edge. The animation plays these in order.
 // `zone` names which zone the far end is speaking for, so one graph node can
@@ -46,7 +54,8 @@ export interface ResolutionResult {
   answer: DNSRecord[];
 }
 
+// What a nameserver can say. It cannot say "cached" — only a resolver can.
 export interface Response {
-  kind: Exclude<StepKind, "query">;
+  kind: Exclude<StepKind, "query" | "cached">;
   records: DNSRecord[];
 }

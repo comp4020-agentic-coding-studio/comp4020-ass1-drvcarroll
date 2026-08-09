@@ -1,10 +1,17 @@
+import type { CacheEntry } from "../dns/cache.js";
 import type { DNSRecord, RecordType, StepKind } from "../dns/types.js";
 
 // Records are the level's subject, so they are annotated rather than
 // tabulated. Each explanation appears the first time it is needed in a run
 // and is dropped after that, the way prose introduces a term once.
 
-export type Role = "delegation" | "glue" | "answer" | "alias" | "denial";
+export type Role =
+  | "delegation"
+  | "glue"
+  | "answer"
+  | "alias"
+  | "denial"
+  | "remembered";
 
 // What the record is doing in this message. The same NS record is a
 // delegation coming from a parent and an answer coming from the zone itself.
@@ -12,6 +19,8 @@ export function roleOf(kind: StepKind, record: DNSRecord): Role {
   switch (kind) {
     case "referral":
       return record.type === "NS" ? "delegation" : "glue";
+    case "cached":
+      return "remembered";
     case "cname":
       return "alias";
     case "nxdomain":
@@ -62,6 +71,8 @@ const ROLE_NOTE: Record<Role, string> = {
     "The name you asked about is a signpost, not a destination. The resolver drops its progress and starts again at the root.",
   denial:
     "No such name. The SOA is what gets cached, so the absence is remembered exactly as an answer would be.",
+  remembered:
+    "Out of the resolver's memory rather than off the network. Nothing was sent, nobody was asked, and it stays true only until the TTL runs out.",
 };
 
 // Everything already explained in this run. Shared across a walk's steps so
@@ -89,6 +100,50 @@ function annotate(
   seen.add(`type:${record.type}`);
   seen.add(`role:${role}`);
   return notes;
+}
+
+const CACHE_COLUMNS = ["Holds", "Name", "Type", "Expires in"];
+
+// What the resolver currently remembers. The graph can only show the
+// consequences of a cache; this is the cache itself, counting down.
+export function cacheTable(held: CacheEntry[], now: number): HTMLElement {
+  const scroller = document.createElement("div");
+  scroller.className = "records-scroll";
+
+  if (held.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "cache-empty";
+    empty.textContent =
+      "Empty. Every lookup starts at the root until something is remembered.";
+    scroller.append(empty);
+    return scroller;
+  }
+
+  const table = document.createElement("table");
+  table.className = "records";
+  scroller.append(table);
+
+  const head = table.createTHead().insertRow();
+  for (const column of CACHE_COLUMNS) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = column;
+    head.append(th);
+  }
+
+  const body = table.createTBody();
+  for (const entry of held) {
+    const record = entry.records[0];
+    const role = record === undefined ? "answer" : roleOf(entry.kind, record);
+    const row = body.insertRow();
+    row.dataset.role = role;
+    cell(row, role, "record-role");
+    cell(row, entry.name);
+    cell(row, entry.type, "record-type");
+    cell(row, humanTtl(entry.expires - now), "record-ttl");
+  }
+
+  return scroller;
 }
 
 export function recordTable(

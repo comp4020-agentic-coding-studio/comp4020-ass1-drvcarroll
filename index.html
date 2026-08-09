@@ -32,6 +32,12 @@
             aria-describedby="lookup-hint"
           />
           <select id="type" data-type aria-label="Record type" hidden></select>
+          <select
+            id="client"
+            data-client
+            aria-label="Who is asking"
+            hidden
+          ></select>
           <button data-testid="interaction" type="submit">Resolve</button>
         </div>
         <p id="lookup-hint" class="hint">
@@ -46,6 +52,15 @@
       <p data-type-note class="type-note" hidden></p>
 
       <div data-graph class="stage"></div>
+
+      <section class="cache" data-cache hidden aria-label="Resolver cache">
+        <div class="cache-head">
+          <h2>What the resolver remembers</h2>
+          <span data-clock class="clock"></span>
+          <button data-wait type="button">Wait 5 minutes</button>
+        </div>
+        <div data-cache-table></div>
+      </section>
 
       <section aria-label="Resolution log">
         <h2>What just happened</h2>
@@ -93,6 +108,39 @@
           The <code>SOA</code> is the one you get when a name does not exist.
           Its last number is how long every resolver is told to remember the
           absence — a typo is cached exactly like a success.
+        </p>
+      </section>
+      <section class="notes" data-notes="l3" hidden>
+        <h2>The thing to notice</h2>
+        <p>
+          Ask for <code>www.anu.edu.au</code>, then ask again. The second time
+          nothing leaves the resolver at all. Now ask for
+          <code>mail.anu.edu.au</code> — a name it has never seen — and watch
+          where the walk <strong>starts</strong>. The root is not asked. The
+          TLD is not asked. The resolver already knew who serves
+          <code>anu.edu.au</code>, because it cached the
+          <strong>referral</strong>, not just the answer.
+        </p>
+        <p>
+          That is the whole reason the thirteen root servers can carry the
+          internet. Then try <code>www.unsw.edu.au</code>: a different zone
+          under the same TLD, so the root is still skipped but the TLD has to
+          be asked. The saving is partial, and it is proportional to what was
+          already known.
+        </p>
+        <p>
+          Switch to the other machine and ask the same name. It gets the
+          cached answer too — it never spoke to a nameserver in its life. A
+          resolver is shared infrastructure, and so is its memory. Hold onto
+          that: in level 4 it becomes the reason one forged record is worth
+          forging.
+        </p>
+        <p>
+          Nothing here <em>propagates</em>. Press <strong>wait</strong> and
+          watch entries drop out of the table as their TTLs run down. A change
+          you make to a zone is not pushed anywhere — the world simply stops
+          remembering the old answer, at a speed you chose in advance when you
+          set the TTL.
         </p>
       </section>
     </main>

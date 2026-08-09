@@ -1,4 +1,4 @@
-import { fqdn } from "./resolve.js";
+import { fqdn } from "./names.js";
 import type { DNSRecord, RecordType, Zone } from "./types.js";
 
 // Real delegation data over DNS-over-HTTPS. A browser cannot observe
