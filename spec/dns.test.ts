@@ -1,0 +1,85 @@
+import { describe, expect, it } from "vitest";
+import { RECURSOR, STUB, resolve, respond } from "../src/dns/resolve.js";
+import { ZONES } from "../src/levels/level1.js";
+import type { Zone } from "../src/dns/types.js";
+
+// Protocol tests. These run headless because src/dns never touches the DOM —
+// if that stops being true, these tests are the first thing to break.
+
+const zoneOf = (server: string): Zone => {
+  const zone = ZONES.find((z) => z.server === server);
+  if (zone === undefined) throw new Error(`no zone on ${server}`);
+  return zone;
+};
+
+const QUERY = { name: "www.anu.edu.au.", type: "A" } as const;
+
+describe("a nameserver answers, refers, or denies — never looks things up", () => {
+  it("refers to the TLD when asked about a name it does not serve", () => {
+    const response = respond(zoneOf("root"), QUERY);
+    expect(response.kind).toBe("referral");
+    expect(response.records.some((r) => r.type === "NS")).toBe(true);
+  });
+
+  it("ships glue with the referral so the nameserver is reachable", () => {
+    const response = respond(zoneOf("tld-au"), QUERY);
+    const ns = response.records.find((r) => r.type === "NS");
+    expect(ns).toBeDefined();
+    expect(response.records.some((r) => r.type === "A" && r.name === ns?.data))
+      .toBe(true);
+  });
+
+  it("answers only from the zone that is authoritative for the name", () => {
+    expect(respond(zoneOf("auth-anu"), QUERY).kind).toBe("answer");
+  });
+
+  it("denies a name that exists nowhere in the tree", () => {
+    const response = respond(zoneOf("auth-anu"), {
+      name: "nope.anu.edu.au.",
+      type: "A",
+    });
+    expect(response.kind).toBe("nxdomain");
+  });
+});
+
+describe("the recursor walks the tree, the client does not", () => {
+  const result = resolve(QUERY, ZONES);
+
+  it("resolves to the authoritative address", () => {
+    expect(result.outcome).toBe("answered");
+    expect(result.answer[0]?.data).toBe("149.171.96.10");
+  });
+
+  it("asks the client exactly one question and gives it one answer", () => {
+    const clientSteps = result.steps.filter(
+      (s) => s.from === STUB || s.to === STUB,
+    );
+    expect(clientSteps).toHaveLength(2);
+    expect(clientSteps[0]?.to).toBe(RECURSOR);
+    expect(clientSteps[1]?.from).toBe(RECURSOR);
+  });
+
+  it("visits root, then TLD, then the authoritative server, in that order", () => {
+    const asked = result.steps
+      .filter((s) => s.kind === "query" && s.from === RECURSOR)
+      .map((s) => s.to);
+    expect(asked).toEqual(["root", "tld-au", "auth-anu"]);
+  });
+
+  it("collects two referrals and exactly one authoritative answer", () => {
+    const fromServers = result.steps.filter((s) => s.to === RECURSOR);
+    expect(fromServers.filter((s) => s.kind === "referral")).toHaveLength(2);
+    expect(fromServers.filter((s) => s.kind === "answer")).toHaveLength(1);
+  });
+
+  it("returns NXDOMAIN for a name the tree does not hold", () => {
+    const missing = resolve({ name: "nope.anu.edu.au.", type: "A" }, ZONES);
+    expect(missing.outcome).toBe("nxdomain");
+  });
+
+  it("accepts a name without its trailing root dot", () => {
+    expect(resolve({ name: "www.anu.edu.au", type: "A" }, ZONES).outcome).toBe(
+      "answered",
+    );
+  });
+});

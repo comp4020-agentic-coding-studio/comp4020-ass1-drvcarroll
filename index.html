@@ -3,22 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>COMP4020 prototype</title>
+    <title>Who do you trust? — how a name becomes an address</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header>
       <nav aria-label="Primary">
-        <a href="./">Home</a>
+        <a href="./">Level 1 — The walk</a>
       </nav>
     </header>
+
     <main>
-      <h1>COMP4020 prototype</h1>
-      <p data-testid="intro">
-        Replace this with your prototype. This week's brief is on the course website;
-        <code>spec/README.md</code> explains how the checks in this repo relate to it.
+      <h1>Who do you trust?</h1>
+
+      <p class="lede">
+        Every site you have ever opened began with your machine asking a
+        stranger <em>where is this?</em> and believing the answer. Watch what
+        actually happens.
       </p>
+
+      <form data-lookup class="lookup">
+        <label for="name">Look up a name</label>
+        <div class="lookup-row">
+          <input
+            id="name"
+            data-name
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            aria-describedby="lookup-hint"
+          />
+          <button data-testid="interaction" type="submit">Resolve</button>
+        </div>
+        <p id="lookup-hint" class="hint">
+          Try <code>www.anu.edu.au</code>, or a name that does not exist.
+        </p>
+      </form>
+
+      <div data-graph class="stage"></div>
+
+      <section aria-label="Resolution log">
+        <h2>What just happened</h2>
+        <div data-testid="output" class="log"></div>
+      </section>
+
+      <section class="notes">
+        <h2>The thing to notice</h2>
+        <p>
+          Your machine sent one question and got one answer. Everything else
+          was the <strong>resolver</strong> walking the tree on your behalf —
+          asking the root, then <code>au</code>, then
+          <code>anu.edu.au</code>. Only the last of those was
+          <strong>authoritative</strong>. The other two just said
+          <em>not me, ask them</em>.
+        </p>
+      </section>
     </main>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
