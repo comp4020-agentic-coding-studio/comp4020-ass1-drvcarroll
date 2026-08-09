@@ -28,12 +28,15 @@ export interface Question {
 export type StepKind = "query" | "referral" | "answer" | "nxdomain";
 
 // One directed message on one edge. The animation plays these in order.
+// `zone` names which zone the far end is speaking for, so one graph node can
+// stand in for every TLD without a node per zone.
 export interface ResolutionStep {
   from: NodeId;
   to: NodeId;
   kind: StepKind;
   records: DNSRecord[];
   note: string;
+  zone?: string;
 }
 
 export interface ResolutionResult {

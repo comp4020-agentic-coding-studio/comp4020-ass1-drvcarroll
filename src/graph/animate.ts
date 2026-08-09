@@ -30,6 +30,7 @@ export function playResolution(
   if (prefersReducedMotion()) {
     steps.forEach((step, index) => {
       hooks.onStep(step, index);
+      if (step.zone) graph.setNodeZone(step.to, step.zone);
       graph.setNodeState(step.to, step.kind);
     });
     hooks.onDone();
@@ -52,6 +53,9 @@ export function playResolution(
     const step = steps[index];
     if (step === undefined) return;
     packet.setAttribute("data-kind", step.kind);
+    // Label the seat before the packet arrives, so the node already reads as
+    // the zone it is about to answer for.
+    if (step.zone) graph.setNodeZone(step.to, step.zone);
     graph.setNodeState(step.from, "active");
     hooks.onStep(step, index);
   }

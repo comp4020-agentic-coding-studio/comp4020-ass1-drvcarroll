@@ -16,6 +16,7 @@ export interface Graph {
   layout: Layout;
   nodeAt(id: string): { x: number; y: number };
   setNodeState(id: string, state: string): void;
+  setNodeZone(id: string, zone: string): void;
   clearStates(): void;
   onLayoutChange(handler: () => void): void;
 }
@@ -48,6 +49,7 @@ export function createGraph(container: HTMLElement): Graph {
 
   const edgeLines = new Map<string, SVGLineElement>();
   const nodeGroups = new Map<string, SVGGElement>();
+  const nodeRoles = new Map<string, SVGTextElement>();
 
   for (const [from, to] of EDGES) {
     const line = el("line", { class: "edge", "data-edge": `${from}:${to}` });
@@ -77,6 +79,7 @@ export function createGraph(container: HTMLElement): Graph {
 
     group.append(box, title, role);
     nodeGroups.set(id, group);
+    nodeRoles.set(id, role);
     nodeLayer.append(group);
   }
 
@@ -121,9 +124,16 @@ export function createGraph(container: HTMLElement): Graph {
     setNodeState(id, state) {
       nodeGroups.get(id)?.setAttribute("data-state", state);
     },
+    setNodeZone(id, zone) {
+      const role = nodeRoles.get(id);
+      if (role) role.textContent = `serving ${zone}`;
+    },
     clearStates() {
       for (const group of nodeGroups.values()) {
         group.removeAttribute("data-state");
+      }
+      for (const [id, role] of nodeRoles) {
+        role.textContent = NODE_LABELS[id]?.role ?? "";
       }
     },
     onLayoutChange(handler) {

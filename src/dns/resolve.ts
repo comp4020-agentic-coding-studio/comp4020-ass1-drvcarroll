@@ -23,10 +23,11 @@ function labelCount(name: string): number {
 }
 
 // "anu.edu.au." is within "au." and within "."; nothing is within itself.
+// The match is on whole labels — "fooau." is not inside "au.".
 function isWithin(name: string, origin: string): boolean {
   if (name === origin) return false;
   if (origin === ".") return true;
-  return name.endsWith(`.${origin}`) || name.endsWith(origin);
+  return name.endsWith(`.${origin}`);
 }
 
 // The delegation a zone holds for the deepest child enclosing the question.
@@ -73,11 +74,7 @@ export function respond(zone: Zone, q: Question): Response {
   };
 }
 
-function zoneOf(zones: Zone[], server: NodeId): Zone | undefined {
-  return zones.find((z) => z.server === server);
-}
-
-function serverForZone(zones: Zone[], origin: string): Zone | undefined {
+function zoneNamed(zones: Zone[], origin: string): Zone | undefined {
   return zones.find((z) => z.origin === origin);
 }
 
@@ -100,34 +97,35 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
     note: `Where is ${question.name}? (${question.type})`,
   });
 
-  let current = serverForZone(zones, ".")?.server;
+  let zone = zoneNamed(zones, ".");
   let outcome: ResolutionResult["outcome"] = "nxdomain";
   let answer: DNSRecord[] = [];
 
-  for (let hop = 0; hop < MAX_HOPS && current !== undefined; hop += 1) {
-    const zone = zoneOf(zones, current);
-    if (zone === undefined) break;
+  for (let hop = 0; hop < MAX_HOPS && zone !== undefined; hop += 1) {
+    const server = zone.server;
 
     steps.push({
       from: RECURSOR,
-      to: current,
+      to: server,
       kind: "query",
       records: [],
       note: `${question.type} record for ${question.name}?`,
+      zone: zone.origin,
     });
 
     const response = respond(zone, question);
     steps.push({
-      from: current,
+      from: server,
       to: RECURSOR,
       kind: response.kind,
       records: response.records,
+      zone: zone.origin,
       note:
         response.kind === "referral"
           ? describeReferral(response.records)
           : response.kind === "answer"
             ? `Authoritative: ${response.records.map((r) => r.data).join(", ")}`
-            : `No such name — ${question.name} does not exist`,
+            : `No such name below ${zone.origin}`,
     });
 
     if (response.kind === "answer") {
@@ -138,10 +136,7 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
     if (response.kind === "nxdomain") break;
 
     const nextOrigin = response.records[0]?.name;
-    current =
-      nextOrigin === undefined
-        ? undefined
-        : serverForZone(zones, nextOrigin)?.server;
+    zone = nextOrigin === undefined ? undefined : zoneNamed(zones, nextOrigin);
   }
 
   steps.push({
@@ -152,7 +147,7 @@ export function resolve(q: Question, zones: Zone[]): ResolutionResult {
     note:
       outcome === "answered"
         ? `${question.name} is at ${answer.map((r) => r.data).join(", ")}`
-        : `${question.name} does not exist`,
+        : `${question.name} is not in this miniature internet`,
   });
 
   return { question, steps, outcome, answer };

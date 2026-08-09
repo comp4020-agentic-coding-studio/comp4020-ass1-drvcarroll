@@ -6,9 +6,9 @@ import type { Zone } from "../src/dns/types.js";
 // Protocol tests. These run headless because src/dns never touches the DOM —
 // if that stops being true, these tests are the first thing to break.
 
-const zoneOf = (server: string): Zone => {
-  const zone = ZONES.find((z) => z.server === server);
-  if (zone === undefined) throw new Error(`no zone on ${server}`);
+const zoneOf = (origin: string): Zone => {
+  const zone = ZONES.find((z) => z.origin === origin);
+  if (zone === undefined) throw new Error(`no zone named ${origin}`);
   return zone;
 };
 
@@ -16,13 +16,13 @@ const QUERY = { name: "www.anu.edu.au.", type: "A" } as const;
 
 describe("a nameserver answers, refers, or denies — never looks things up", () => {
   it("refers to the TLD when asked about a name it does not serve", () => {
-    const response = respond(zoneOf("root"), QUERY);
+    const response = respond(zoneOf("."), QUERY);
     expect(response.kind).toBe("referral");
     expect(response.records.some((r) => r.type === "NS")).toBe(true);
   });
 
   it("ships glue with the referral so the nameserver is reachable", () => {
-    const response = respond(zoneOf("tld-au"), QUERY);
+    const response = respond(zoneOf("au."), QUERY);
     const ns = response.records.find((r) => r.type === "NS");
     expect(ns).toBeDefined();
     expect(response.records.some((r) => r.type === "A" && r.name === ns?.data))
@@ -30,11 +30,18 @@ describe("a nameserver answers, refers, or denies — never looks things up", ()
   });
 
   it("answers only from the zone that is authoritative for the name", () => {
-    expect(respond(zoneOf("auth-anu"), QUERY).kind).toBe("answer");
+    expect(respond(zoneOf("anu.edu.au."), QUERY).kind).toBe("answer");
+  });
+
+  it("matches delegations on label boundaries, not raw suffixes", () => {
+    // "fooau." is not inside "au." — only a whole-label match counts, or the
+    // root would hand "fooau." to the Australian nameservers.
+    const response = respond(zoneOf("."), { name: "fooau.", type: "A" });
+    expect(response.kind).toBe("nxdomain");
   });
 
   it("denies a name that exists nowhere in the tree", () => {
-    const response = respond(zoneOf("auth-anu"), {
+    const response = respond(zoneOf("anu.edu.au."), {
       name: "nope.anu.edu.au.",
       type: "A",
     });
@@ -63,7 +70,7 @@ describe("the recursor walks the tree, the client does not", () => {
     const asked = result.steps
       .filter((s) => s.kind === "query" && s.from === RECURSOR)
       .map((s) => s.to);
-    expect(asked).toEqual(["root", "tld-au", "auth-anu"]);
+    expect(asked).toEqual(["root", "tld", "auth"]);
   });
 
   it("collects two referrals and exactly one authoritative answer", () => {
@@ -75,6 +82,22 @@ describe("the recursor walks the tree, the client does not", () => {
   it("returns NXDOMAIN for a name the tree does not hold", () => {
     const missing = resolve({ name: "nope.anu.edu.au.", type: "A" }, ZONES);
     expect(missing.outcome).toBe("nxdomain");
+  });
+
+  it("resolves a name under a different TLD", () => {
+    const result = resolve({ name: "www.google.com", type: "A" }, ZONES);
+    expect(result.outcome).toBe("answered");
+    expect(result.answer[0]?.data).toBe("142.250.70.196");
+  });
+
+  it("reuses the one TLD seat for whichever zone is being asked", () => {
+    const au = resolve({ name: "www.anu.edu.au", type: "A" }, ZONES);
+    const com = resolve({ name: "www.google.com", type: "A" }, ZONES);
+    const zoneAtTld = (r: typeof au) =>
+      r.steps.find((s) => s.to === "tld")?.zone;
+
+    expect(zoneAtTld(au)).toBe("au.");
+    expect(zoneAtTld(com)).toBe("com.");
   });
 
   it("accepts a name without its trailing root dot", () => {
