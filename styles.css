@@ -143,6 +143,22 @@ button:hover {
 .edge {
   stroke: var(--line);
   stroke-width: 2;
+  opacity: 1;
+  transition: opacity 0.35s;
+}
+
+/* A path you cannot know about yet. */
+.edge[data-hidden="true"] {
+  opacity: 0;
+}
+
+.edge-label {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--muted);
 }
 
 .node-box {
@@ -167,6 +183,12 @@ button:hover {
 
 .node[data-state="active"] .node-box {
   stroke: var(--query);
+}
+
+/* The connection lands: the site is finally reachable. */
+.node[data-state="query"] .node-box {
+  stroke: var(--query);
+  stroke-width: 3;
 }
 
 .node[data-state="referral"] .node-box {

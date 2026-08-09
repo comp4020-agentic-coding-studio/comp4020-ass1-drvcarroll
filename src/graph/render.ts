@@ -1,4 +1,5 @@
 import {
+  DEFERRED_EDGES,
   EDGES,
   NODE_LABELS,
   POSITIONS,
@@ -8,15 +9,28 @@ import {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const NARROW = "(max-width: 700px)";
+const LABEL_OFFSET = 15;
+
+// Compass arrows, indexed by eighth-turn. SVG y grows downward.
+const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
+
+type Point = { x: number; y: number };
+
+function arrowFor(from: Point, to: Point): string {
+  const eighth = Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI / 4);
+  return ARROWS[(Math.round(eighth) + 8) % 8] ?? "→";
+}
 
 export type Layout = keyof Positions;
 
 export interface Graph {
   root: SVGSVGElement;
   layout: Layout;
-  nodeAt(id: string): { x: number; y: number };
+  nodeAt(id: string): Point;
   setNodeState(id: string, state: string): void;
   setNodeZone(id: string, zone: string): void;
+  revealEdge(from: string, to: string): void;
+  markEdge(from: string, to: string, label: string): void;
   clearStates(): void;
   onLayoutChange(handler: () => void): void;
 }
@@ -43,19 +57,40 @@ export function createGraph(container: HTMLElement): Graph {
   });
 
   const edgeLayer = el("g", { class: "edges" });
+  const labelLayer = el("g", { class: "edge-labels" });
   const nodeLayer = el("g", { class: "nodes" });
-  svg.append(edgeLayer, nodeLayer);
+  svg.append(edgeLayer, labelLayer, nodeLayer);
   container.append(svg);
 
   const edgeLines = new Map<string, SVGLineElement>();
+  const edgeLabels = new Map<string, SVGTextElement>();
+  // Traversals are stored, not their rendered text: the arrow depends on the
+  // layout, and the layout can change under us.
+  const edgeMarks = new Map<string, { from: string; to: string; at: string }[]>();
   const nodeGroups = new Map<string, SVGGElement>();
   const nodeRoles = new Map<string, SVGTextElement>();
 
   for (const [from, to] of EDGES) {
-    const line = el("line", { class: "edge", "data-edge": `${from}:${to}` });
-    edgeLines.set(`${from}:${to}`, line);
+    const key = `${from}:${to}`;
+    const line = el("line", {
+      class: "edge",
+      "data-edge": key,
+      "data-hidden": String(DEFERRED_EDGES.has(key)),
+    });
+    edgeLines.set(key, line);
     edgeLayer.append(line);
+
+    const label = el("text", { class: "edge-label" });
+    edgeLabels.set(key, label);
+    labelLayer.append(label);
   }
+
+  // Edges are undirected on screen, so a step going either way finds one.
+  const edgeKey = (from: string, to: string): string | undefined => {
+    if (edgeLines.has(`${from}:${to}`)) return `${from}:${to}`;
+    if (edgeLines.has(`${to}:${from}`)) return `${to}:${from}`;
+    return undefined;
+  };
 
   for (const id of Object.keys(NODE_LABELS)) {
     const label = NODE_LABELS[id];
@@ -103,6 +138,22 @@ export function createGraph(container: HTMLElement): Graph {
       line.setAttribute("y1", String(a.y));
       line.setAttribute("x2", String(b.x));
       line.setAttribute("y2", String(b.y));
+
+      // Labels sit off to one side of the line, so they never overprint it.
+      const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const label = edgeLabels.get(key);
+      if (label === undefined) continue;
+      label.setAttribute(
+        "x",
+        String((a.x + b.x) / 2 - ((b.y - a.y) / length) * LABEL_OFFSET),
+      );
+      label.setAttribute(
+        "y",
+        String((a.y + b.y) / 2 + ((b.x - a.x) / length) * LABEL_OFFSET),
+      );
+      label.textContent = (edgeMarks.get(key) ?? [])
+        .map((m) => `${m.at}${arrowFor(positionsFor(m.from), positionsFor(m.to))}`)
+        .join(" ");
     }
   }
 
@@ -128,12 +179,30 @@ export function createGraph(container: HTMLElement): Graph {
       const role = nodeRoles.get(id);
       if (role) role.textContent = `serving ${zone}`;
     },
+    revealEdge(from, to) {
+      const key = edgeKey(from, to);
+      if (key) edgeLines.get(key)?.setAttribute("data-hidden", "false");
+    },
+    markEdge(from, to, label) {
+      const key = edgeKey(from, to);
+      if (key === undefined) return;
+      edgeMarks.set(key, [
+        ...(edgeMarks.get(key) ?? []),
+        { from, to, at: label },
+      ]);
+      place();
+    },
     clearStates() {
       for (const group of nodeGroups.values()) {
         group.removeAttribute("data-state");
       }
       for (const [id, role] of nodeRoles) {
         role.textContent = NODE_LABELS[id]?.role ?? "";
+      }
+      edgeMarks.clear();
+      for (const label of edgeLabels.values()) label.textContent = "";
+      for (const [key, line] of edgeLines) {
+        line.setAttribute("data-hidden", String(DEFERRED_EDGES.has(key)));
       }
     },
     onLayoutChange(handler) {

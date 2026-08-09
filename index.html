@@ -55,11 +55,16 @@
         <h2>The thing to notice</h2>
         <p>
           Your machine sent one question and got one answer. Everything else
-          was the <strong>resolver</strong> walking the tree on your behalf —
-          asking the root, then <code>au</code>, then
-          <code>anu.edu.au</code>. Only the last of those was
-          <strong>authoritative</strong>. The other two just said
-          <em>not me, ask them</em>.
+          was the <strong>resolver</strong> walking the tree on your behalf,
+          one delegation at a time. Only the last server it reached was
+          <strong>authoritative</strong> for the name. Every other one just
+          said <em>not me, ask them</em>.
+        </p>
+        <p>
+          Notice where the web server sits. Your traffic never passes through
+          a nameserver — they only hand out directions. That is why the line
+          to the site cannot be drawn until the walk finishes: until then, you
+          do not know the address to draw it to.
         </p>
       </section>
     </main>

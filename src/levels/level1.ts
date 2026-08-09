@@ -19,24 +19,27 @@ export const NODE_LABELS: Record<string, { title: string; role: string }> = {
   origin: { title: "Web server", role: "the site itself" },
 };
 
-export const VIEWBOX = { wide: "0 0 960 420", narrow: "0 0 420 900" };
+export const VIEWBOX = { wide: "0 0 960 460", narrow: "0 0 420 800" };
 
+// The web server sits with the machine, not past the nameservers. Placing it
+// beyond them draws a path that does not exist: your traffic never travels
+// through a TLD server, it only asks one for directions.
 export const POSITIONS: Positions = {
   wide: {
-    stub: { x: 90, y: 210 },
-    recursor: { x: 300, y: 210 },
-    root: { x: 620, y: 70 },
-    tld: { x: 620, y: 210 },
-    auth: { x: 620, y: 350 },
-    origin: { x: 870, y: 210 },
+    stub: { x: 110, y: 150 },
+    origin: { x: 110, y: 340 },
+    recursor: { x: 380, y: 150 },
+    root: { x: 720, y: 70 },
+    tld: { x: 720, y: 230 },
+    auth: { x: 720, y: 390 },
   },
   narrow: {
-    stub: { x: 210, y: 70 },
+    stub: { x: 110, y: 60 },
+    origin: { x: 305, y: 60 },
     recursor: { x: 210, y: 230 },
     root: { x: 210, y: 400 },
     tld: { x: 210, y: 550 },
     auth: { x: 210, y: 700 },
-    origin: { x: 210, y: 840 },
   },
 };
 
@@ -48,6 +51,11 @@ export const EDGES: [string, string][] = [
   ["recursor", "auth"],
   ["stub", "origin"],
 ];
+
+// You cannot draw a line to a server whose address you do not yet know. This
+// edge stays hidden until the walk hands one back, which is the whole point
+// of the walk.
+export const DEFERRED_EDGES = new Set(["stub:origin"]);
 
 // A miniature internet. Each zone knows only its own records and who it
 // delegates to — no server here holds a complete picture, which is the point.
