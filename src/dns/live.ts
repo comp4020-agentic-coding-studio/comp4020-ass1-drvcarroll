@@ -65,11 +65,13 @@ function toRecords(response: DohResponse, want: RecordType): DNSRecord[] {
     }));
 }
 
-// Every proper suffix of the name, root first: ".", "au.", "edu.au.", ...
+// Every suffix of the name, root first, including the name itself — an apex
+// like google.com. is a zone cut, and dropping it would seat its address in
+// the TLD's zone and skip a delegation that really happened.
 export function suffixesOf(name: string): string[] {
   const labels = fqdn(name).split(".").filter(Boolean);
   const out = ["."];
-  for (let i = labels.length - 1; i > 0; i -= 1) {
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
     out.push(`${labels.slice(i).join(".")}.`);
   }
   return out;
@@ -105,8 +107,8 @@ async function glueFor(
 // a deep name simply visits the authoritative seat more than once.
 function seatFor(index: number, total: number): string {
   if (index === 0) return "root";
-  if (index === 1 && total > 2) return "tld";
-  return "auth";
+  if (index === total - 1) return "auth";
+  return index === 1 ? "tld" : "auth";
 }
 
 export async function buildZones(
