@@ -165,3 +165,35 @@ describe("a CNAME is an alias, so resolution starts over", () => {
     expect(looped.outcome).toBe("nxdomain");
   });
 });
+
+// A server that is not there is a different failure from a name that is not
+// there, and the visitor is about to be handed a switch that causes the first.
+describe("a server that does not answer", () => {
+  const without = (server: string): Zone[] =>
+    ZONES.filter((z) => z.server !== server);
+
+  it("reports a timeout rather than inventing a missing name", () => {
+    const result = resolve(QUERY, without("auth"));
+    expect(result.outcome).toBe("timeout");
+    expect(result.steps.some((s) => s.kind === "timeout")).toBe(true);
+  });
+
+  it("names the zone nobody replied for", () => {
+    const result = resolve(QUERY, without("auth"));
+    const step = result.steps.find((s) => s.kind === "timeout");
+    expect(step?.zone).toBe("anu.edu.au.");
+    // It never left the resolver: there was no server to send it to.
+    expect(step?.from).toBe(step?.to);
+  });
+
+  it("times out at the root when the root is the one that is down", () => {
+    const result = resolve(QUERY, without("root"));
+    expect(result.outcome).toBe("timeout");
+    expect(result.steps.find((s) => s.kind === "timeout")?.zone).toBe(".");
+  });
+
+  it("still says nxdomain for a name that genuinely does not exist", () => {
+    const result = resolve({ name: "nowhere.au.", type: "A" }, ZONES);
+    expect(result.outcome).toBe("nxdomain");
+  });
+});

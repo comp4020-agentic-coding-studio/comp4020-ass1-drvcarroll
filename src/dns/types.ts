@@ -36,6 +36,9 @@ export interface Question {
 // "forged" and "rejected" are the same message with a different transaction
 // ID. That is the entire difference, and it is why they are two kinds rather
 // than one kind with a flag: the resolver's whole acceptance test is here.
+// "timeout" is not "nxdomain" either: the name may well exist, but nobody is
+// answering for it. Reporting a downed server as a missing name would hide
+// the outage, which is exactly what the visitor is being invited to cause.
 export type StepKind =
   | "query"
   | "referral"
@@ -43,6 +46,7 @@ export type StepKind =
   | "cname"
   | "nodata"
   | "nxdomain"
+  | "timeout"
   | "cached"
   | "forged"
   | "rejected";
@@ -65,13 +69,16 @@ export interface ResolutionStep {
 export interface ResolutionResult {
   question: Question;
   steps: ResolutionStep[];
-  outcome: "answered" | "nodata" | "nxdomain";
+  outcome: "answered" | "nodata" | "nxdomain" | "timeout";
   answer: DNSRecord[];
 }
 
 // What a nameserver can say. It cannot say "cached" — only a resolver can —
 // and "forged" is not a kind of answer, it is who sent one.
 export interface Response {
-  kind: Exclude<StepKind, "query" | "cached" | "forged" | "rejected">;
+  kind: Exclude<
+    StepKind,
+    "query" | "cached" | "forged" | "rejected" | "timeout"
+  >;
   records: DNSRecord[];
 }

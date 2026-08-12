@@ -115,6 +115,9 @@ function finalNote(
   if (outcome === "nodata") {
     return `${q.name} exists, but has no ${q.type} record`;
   }
+  if (outcome === "timeout") {
+    return `No reply about ${q.name} — the servers for it are unreachable`;
+  }
   return `${q.name} does not exist`;
 }
 
@@ -159,6 +162,16 @@ export function resolve(
     steps.push({ from: RECURSOR, to: RECURSOR, kind: "cached", records, note });
   };
 
+  // A zone the resolver believes in — because the root always exists, or
+  // because a parent just delegated it — with nobody serving it. The server is
+  // down, so the query goes out and no reply comes back.
+  let unreachable: string | undefined;
+  const reach = (origin: string, ns?: string): Zone | undefined => {
+    const found = zoneNamed(zones, origin, ns);
+    if (found === undefined) unreachable = origin;
+    return found;
+  };
+
   // Where the walk can start. Anything above a cached delegation is skipped,
   // which is the whole reason the root is barely touched in practice.
   const enter = (name: string): Zone | undefined => {
@@ -169,7 +182,7 @@ export function resolve(
     }
     // Whichever nameserver the cached delegation names, including one the
     // resolver was lied to about. A poisoned cache needs no other machinery.
-    return zoneNamed(zones, origin, held[0]?.data);
+    return reach(origin, held[0]?.data);
   };
 
   let zone = enter(question.name);
@@ -267,7 +280,21 @@ export function resolve(
     zone =
       referral === undefined
         ? undefined
-        : zoneNamed(zones, referral.name, referral.data);
+        : reach(referral.name, referral.data);
+  }
+
+  // Nowhere left to ask, and the last place named had no server: that is a
+  // timeout, not a missing name.
+  if (outcome === "nxdomain" && zone === undefined && unreachable !== undefined) {
+    outcome = "timeout";
+    steps.push({
+      from: RECURSOR,
+      to: RECURSOR,
+      kind: "timeout",
+      records: [],
+      zone: unreachable,
+      note: `No reply from the nameservers for ${unreachable}`,
+    });
   }
 
   steps.push({

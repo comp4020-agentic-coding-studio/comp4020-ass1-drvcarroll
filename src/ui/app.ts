@@ -60,6 +60,7 @@ const STEP_LABEL: Record<ResolutionStep["kind"], string> = {
   cname: "Alias",
   nodata: "No such record",
   nxdomain: "No such name",
+  timeout: "No reply",
   cached: "From cache",
   forged: "Forged — believed",
   rejected: "Forged — discarded",
@@ -71,6 +72,8 @@ const OUTCOME_NOTE: Record<ResolutionResult["outcome"], (q: string) => string> =
     // Said plainly, because "does not exist" here would simply be false.
     nodata: (q) => `${q} exists. It just has no record of that type.`,
     nxdomain: (q) => `${q} does not exist.`,
+    // Unanswered is not absent: the name may be fine and the server down.
+    timeout: (q) => `Nobody answered for ${q}.`,
   };
 
 // A message only counts as sent if it crossed an edge. A cached step has the
