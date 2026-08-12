@@ -22,7 +22,12 @@ import type {
   ResolutionStep,
   Zone,
 } from "../dns/types.js";
-import { playResolution, type Playback } from "../graph/animate.js";
+import {
+  SPEEDS,
+  playResolution,
+  speedLabel,
+  type Playback,
+} from "../graph/animate.js";
 import { createGraph } from "../graph/render.js";
 import { LEVEL1 } from "../levels/level1.js";
 import { LEVEL2 } from "../levels/level2.js";
@@ -35,7 +40,13 @@ import {
   kaminskyName,
 } from "../levels/level4.js";
 import type { LevelConfig } from "../levels/types.js";
-import { cacheTable, glossFor, recordTable, type Seen } from "./records.js";
+import {
+  cacheTable,
+  glossFor,
+  recordTable,
+  zoneRecords,
+  type Seen,
+} from "./records.js";
 
 const LEVELS: LevelConfig[] = [LEVEL1, LEVEL2, LEVEL3, LEVEL4];
 
@@ -104,33 +115,65 @@ function line(text: string, state?: string): HTMLParagraphElement {
 const hex = (value: number): string =>
   `0x${value.toString(16).toUpperCase().padStart(2, "0")}`;
 
-function stepRow(step: ResolutionStep, index: number, seen: Seen): HTMLLIElement {
+// The transcript is also the scrubber, so a row exists for every message from
+// the start — but an unreached one shows only its number. Knowing there are
+// nine messages left is the useful part; reading them early is not.
+function placeholderRow(index: number, seek: () => void): HTMLLIElement {
   const row = document.createElement("li");
   row.className = "step";
-  row.dataset.kind = step.kind;
+  row.dataset.reached = "false";
+
+  // A button rather than a click handler on the row: seeking back through the
+  // walk has to work from the keyboard, and the records table cannot live
+  // inside a button.
+  const seat = document.createElement("button");
+  seat.type = "button";
+  seat.className = "step-seek";
+  seat.disabled = true;
 
   const label = document.createElement("span");
   label.className = "step-label";
-  label.textContent = `${String(index + 1)}. ${STEP_LABEL[step.kind]}`;
+  label.textContent = String(index + 1);
 
   const note = document.createElement("span");
   note.className = "step-note";
-  note.textContent = step.note;
 
-  row.append(label, note);
+  seat.append(label, note);
+  seat.addEventListener("click", seek);
+  row.append(seat);
+  return row;
+}
+
+function fillRow(
+  row: HTMLLIElement,
+  step: ResolutionStep,
+  index: number,
+  seen: Seen,
+): void {
+  row.dataset.kind = step.kind;
+  row.dataset.reached = "true";
+
+  const seat = row.querySelector("button");
+  const label = row.querySelector(".step-label");
+  const note = row.querySelector(".step-note");
+  if (!seat || !label || !note) return;
+
+  seat.disabled = false;
+  seat.setAttribute("aria-label", `Message ${String(index + 1)}`);
+  label.textContent = `${String(index + 1)}. ${STEP_LABEL[step.kind]}`;
+  note.textContent = step.note;
 
   // The acceptance test, shown as the number it actually is.
   if (step.txid !== undefined) {
     const id = document.createElement("span");
     id.className = "step-txid";
     id.textContent = hex(step.txid);
-    row.append(id);
+    seat.append(id);
   }
 
   if (step.records.length > 0) {
     row.append(recordTable(step.records, step.kind, seen));
   }
-  return row;
 }
 
 const SOURCE_NOTE: Record<string, string> = {
@@ -180,16 +223,17 @@ export function start(): void {
   const typeNote = document.querySelector<HTMLElement>("[data-type-note]");
   const log = document.querySelector<HTMLElement>('[data-testid="output"]');
   const source = document.querySelector<HTMLElement>("[data-source]");
-  const panel = document.querySelector<HTMLElement>("[data-cache]");
-  const held = document.querySelector<HTMLElement>("[data-cache-table]");
-  const clock = document.querySelector<HTMLElement>("[data-clock]");
-  const wait = document.querySelector<HTMLButtonElement>("[data-wait]");
+  const advance = document.querySelector<HTMLButtonElement>("[data-next]");
+  const rewind = document.querySelector<HTMLButtonElement>("[data-back]");
+  const speed = document.querySelector<HTMLInputElement>("[data-speed]");
+  const speedNote = document.querySelector<HTMLElement>("[data-speed-note]");
   const threats = document.querySelector<HTMLElement>("[data-threats]");
   const threat = document.querySelector<HTMLSelectElement>("[data-threat]");
   const fire = document.querySelector<HTMLButtonElement>("[data-forge]");
   const odds = document.querySelector<HTMLElement>("[data-odds]");
   if (!stage || !nav || !form || !input || !picker || !typeNote) return;
-  if (!log || !source || !who || !panel || !held || !clock || !wait) return;
+  if (!log || !source || !who || !advance || !rewind) return;
+  if (!speed || !speedNote) return;
   if (!threats || !threat || !fire || !odds) return;
 
   let level = LEVELS[0] ?? LEVEL1;
@@ -268,13 +312,105 @@ export function start(): void {
   const zoneCache = new Map<string, Zone[]>();
   let token = 0;
 
-  // The cache is only shown where it exists, so it never reads as an empty
-  // feature on a level that has not introduced it.
-  const showCache = (): void => {
-    if (!level.caching) return;
-    clock.textContent = `${String(Math.round(now / 60))} minutes in`;
-    held.replaceChildren(cacheTable(entries(cache, now), now));
+  // Rebuilds the open resolver panel when a lookup or the clock changes what
+  // it holds. Undefined whenever no cache is on screen, so a lookup never
+  // renders a panel nobody opened.
+  let refreshCache: (() => void) | undefined;
+
+  // The zones the last walk actually ran on, which is not always the level's
+  // canned set — L1 and L2 fetch real delegation data. Showing a machine the
+  // stored records while the walk used live ones would be exactly the kind of
+  // quiet lie this page exists to argue against.
+  let shownZones: Zone[] = level.zones;
+
+  // Where the visitor is in the current walk. Kept here because the transport
+  // button's label *is* the step counter — one control, not a control and a
+  // readout beside it.
+  let at = -1;
+  let total = 0;
+  let rate = SPEEDS[Number(speed.value)] ?? 0;
+
+  const showTransport = (): void => {
+    advance.textContent =
+      at >= total - 1
+        ? "Replay"
+        : `Next message · ${String(at + 2)} of ${String(total)}`;
+    advance.disabled = total === 0;
+    rewind.disabled = at <= 0;
   };
+
+  // Machines that hold no zone data still have to answer for themselves —
+  // an empty panel would read as a bug rather than as the point.
+  const HOLDS_NOTHING: Record<string, string> = {
+    stub: "Your machine holds nothing. It knows one thing: which resolver to ask. One question out, one answer back — everything else on this diagram happened on its behalf.",
+    origin:
+      "A web server, not a nameserver. It holds no DNS records at all. It is only the address the whole walk was looking for, which is why nothing here delegates anywhere.",
+    recursor:
+      "A resolver holds no zone data of its own — it has authority over nothing. At this level it also remembers nothing between lookups, so every walk starts again at the root.",
+    attacker:
+      "Holds nothing, and needs nothing. Everything it sends is written for the occasion; that is what makes it a forgery rather than a record.",
+  };
+
+  // What a machine is holding, as opposed to what it just said. The cache
+  // lives here rather than in a panel of its own: it belongs to the resolver,
+  // and putting the clock beside the TTLs it runs down puts the action next
+  // to its effect.
+  const inspect = (id: string): void => {
+    const label = level.nodes[id];
+    const body = document.createElement("div");
+    body.className = "inspector-body";
+
+    if (id === "recursor" && level.caching) {
+      const head = document.createElement("div");
+      head.className = "cache-head";
+
+      const clock = document.createElement("span");
+      clock.className = "clock";
+
+      const wait = document.createElement("button");
+      wait.type = "button";
+      wait.textContent = "Wait 5 minutes";
+
+      const holder = document.createElement("div");
+
+      // Replaces its contents rather than the panel, so the button the
+      // visitor is holding focus on survives being pressed.
+      refreshCache = (): void => {
+        clock.textContent = `${String(Math.round(now / 60))} minutes in`;
+        holder.replaceChildren(cacheTable(entries(cache, now), now));
+      };
+      refreshCache();
+
+      wait.addEventListener("click", () => {
+        now += WAIT_STEP;
+        refreshCache?.();
+      });
+
+      head.append(clock, wait);
+      body.append(head, holder);
+    }
+
+    const served = shownZones.filter((zone) => zone.server === id);
+    for (const zone of served) {
+      const heading = document.createElement("h4");
+      heading.textContent =
+        zone.origin === "."
+          ? "Authoritative for the root zone"
+          : `Authoritative for ${zone.origin}`;
+      body.append(heading, zoneRecords(zone.records));
+    }
+
+    if (served.length === 0 && body.childElementCount === 0) {
+      body.append(line(HOLDS_NOTHING[id] ?? "Holds no zone data."));
+    }
+
+    graph.openInspector(id, label?.title ?? id, body);
+  };
+
+  graph.onNodeSelect((id) => {
+    refreshCache = undefined;
+    if (id !== undefined) inspect(id);
+  });
 
   const run = async (
     name: string,
@@ -289,6 +425,12 @@ export function start(): void {
     const mine = (token += 1);
     const { zones, source: origin } = await zonesFor(name, type, level, zoneCache);
     if (mine !== token) return; // a newer lookup already started
+
+    // An open panel is showing zone data that this lookup may have just
+    // replaced, so it is rebuilt rather than left saying something stale.
+    shownZones = zones;
+    const open = graph.inspecting();
+    if (open !== undefined) inspect(open);
 
     source.dataset.state = origin;
     source.textContent = SOURCE_NOTE[origin] ?? "";
@@ -325,31 +467,60 @@ export function start(): void {
     // later hops stay readable.
     const seen: Seen = new Set();
 
-    playback = playResolution(graph, steps, {
-      onStep(step, index) {
-        list.append(stepRow(step, index, seen));
-      },
-      onDone() {
-        const summary = document.createElement("p");
-        summary.className = "summary";
-        summary.dataset.outcome = result.outcome;
-        summary.textContent =
-          result.outcome === "answered"
-            ? `Resolved in ${String(result.steps.length)} messages — and your machine sent only one of them.`
-            : OUTCOME_NOTE[result.outcome](result.question.name);
-        log.append(summary);
+    const rows = steps.map((_, index) =>
+      placeholderRow(index, () => {
+        playback?.seek(index);
+      }),
+    );
+    list.append(...rows);
 
-        if (level.caching) {
-          const saved = cold - sent(result.steps);
-          const count = document.createElement("p");
-          count.className = "tally";
-          count.textContent = `${String(sent(result.steps))} messages sent, ${String(saved)} saved by the cache.`;
-          log.append(count);
-          showCache();
-        }
-        showThreat();
+    at = -1;
+    total = steps.length;
+    showTransport();
+
+    playback = playResolution(
+      graph,
+      steps,
+      {
+        // Rows fill in as the walk reaches them and stay filled, so seeking
+        // back re-reads a message rather than un-revealing it.
+        onSeek(index, furthest) {
+          at = index;
+          for (let i = 0; i <= furthest; i += 1) {
+            const row = rows[i];
+            const step = steps[i];
+            if (row === undefined || step === undefined) continue;
+            if (row.dataset.reached !== "true") fillRow(row, step, i, seen);
+            row.dataset.current = String(i === index);
+          }
+          showTransport();
+          // Not on the first message: that one arrives unprompted on load,
+          // and yanking the page down to the log is not what was asked for.
+          if (index > 0) rows[index]?.scrollIntoView({ block: "nearest" });
+        },
+        onDone() {
+          const summary = document.createElement("p");
+          summary.className = "summary";
+          summary.dataset.outcome = result.outcome;
+          summary.textContent =
+            result.outcome === "answered"
+              ? `Resolved in ${String(result.steps.length)} messages — and your machine sent only one of them.`
+              : OUTCOME_NOTE[result.outcome](result.question.name);
+          log.append(summary);
+
+          if (level.caching) {
+            const saved = cold - sent(result.steps);
+            const count = document.createElement("p");
+            count.className = "tally";
+            count.textContent = `${String(sent(result.steps))} messages sent, ${String(saved)} saved by the cache.`;
+            log.append(count);
+            refreshCache?.();
+          }
+          showThreat();
+        },
       },
-    });
+      rate,
+    );
   };
 
   const chosenType = (): RecordType =>
@@ -427,8 +598,7 @@ export function start(): void {
     // this one had already learned something it never saw.
     cache = new Map();
     now = 0;
-    panel.hidden = !next.caching;
-    showCache();
+    shownZones = next.zones;
 
     // A fresh resolver has never been lied to either, so the attempt count
     // and the defences reset with it.
@@ -474,11 +644,22 @@ export function start(): void {
   });
   who.addEventListener("change", submit);
 
-  // Time passes and nothing else happens. The next lookup is the one that
-  // finds out what survived, which is what a TTL actually governs.
-  wait.addEventListener("click", () => {
-    now += WAIT_STEP;
-    showCache();
+  // At the end there is nothing left to advance to, so the same button
+  // restarts the walk rather than going dead.
+  advance.addEventListener("click", () => {
+    if (at >= total - 1) submit();
+    else playback?.next();
+  });
+  rewind.addEventListener("click", () => {
+    playback?.back();
+  });
+
+  // Zero is manual. One control carries the pacing and the mode, because a
+  // separate play/pause would be a second control saying the same thing.
+  speed.addEventListener("input", () => {
+    rate = SPEEDS[Number(speed.value)] ?? 0;
+    speedNote.textContent = speedLabel(rate);
+    playback?.setSpeed(rate);
   });
 
   threat.addEventListener("change", () => {
@@ -504,5 +685,6 @@ export function start(): void {
     void run(kaminskyName(attempts), "A", chosenClient());
   });
 
+  speedNote.textContent = speedLabel(rate);
   apply(level);
 }

@@ -71,14 +71,40 @@ its kind is visible at a glance: query, referral, answer, cached answer, forged.
 Referral and answer must not look the same — concept 3 depends on it.
 
 **The one interaction:** the visitor picks a domain (and from level 2, a record
-type), triggers a lookup, and watches the resolution play out on the graph. A
-result panel reports what happened in words: the chain of referrals, the final
-answer, a cache hit, an `NXDOMAIN`, or an attack outcome.
+type), then **drives the resolution one message at a time**. A result panel
+reports what happened in words: the chain of referrals, the final answer, a
+cache hit, an `NXDOMAIN`, or an attack outcome.
 
-That interaction is what `spec/assignment-1.test.ts` asserts. The trigger
-control carries `data-testid="interaction"`; the result panel carries
-`data-testid="output"`. Those hooks are a contract with the spec test — rename
-them and the test is lying.
+Driving it, rather than watching it, is the whole difference between this and a
+diagram with a play button. Three consequences, and they are the design:
+
+- **The transcript is the transport.** The step list is not a log printed
+  beside the animation; it *is* the scrubber. A row exists for every message
+  from the start, so the visitor can see how many are coming, but an unreached
+  row shows only its number — reading ahead would give away the walk. Reached
+  rows stay readable and seek back to themselves. One object carries the
+  history, the progress counter and the control.
+- **Pacing is one control, not three.** A single slider runs from `0` — manual,
+  click to advance — through auto-play rates. Play, pause and speed are the
+  same decision, so they are the same widget. Manual is the default: the
+  premise is that the visitor advances the walk.
+- **Machines are openable.** Every node is a button. Opening one shows what it
+  actually holds — its zone records, and for the resolver, its cache with the
+  clock that expires it. This is why there is no cache *section*: a cache
+  belongs to a machine, and the button that advances time sits beside the TTLs
+  it runs down. Panels stacked under the graph were the page explaining itself;
+  a machine you can open is the page letting you check.
+
+What a machine shows is the zone data the **last walk actually ran on**, not
+the canned set — L1 and L2 fetch real delegation data, and a panel quoting
+stored records while the graph showed live ones would be precisely the quiet
+substitution this explainer exists to argue against.
+
+That interaction is what `spec/assignment-1.test.ts` asserts. The control that
+advances the walk carries `data-testid="interaction"` — it is on the step
+button rather than on `Resolve`, because stepping is what the visitor spends
+the minute doing. The result panel carries `data-testid="output"`. Those hooks
+are a contract with the spec test — rename them and the test is lying.
 
 Everything else on the page is in service of that one interaction. Level
 selection is part of it, not a second feature.
@@ -125,8 +151,10 @@ resolution starts partway down the tree: the recursor already knows who serves
 the thing most people have never pictured.
 
 A TTL clock the visitor can advance shows entries expiring and the full walk
-returning. A counter tracks queries sent against queries saved, so efficiency
-becomes a number rather than an adjective.
+returning. It lives inside the resolver's own panel, opened by clicking it, so
+the clock and the entries it expires are never on screen apart. A counter
+tracks queries sent against queries saved, so efficiency becomes a number
+rather than an adjective.
 
 _Lands:_ concept 5, and sets up the blast-radius argument in L4 — everything
 that makes caching efficient also makes one lie go further.

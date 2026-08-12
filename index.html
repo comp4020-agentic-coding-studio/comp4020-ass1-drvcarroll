@@ -38,13 +38,14 @@
             aria-label="Who is asking"
             hidden
           ></select>
-          <button data-testid="interaction" type="submit">Resolve</button>
+          <button type="submit">Resolve</button>
         </div>
         <p id="lookup-hint" class="hint">
           Any real domain. A name that does not exist genuinely returns
           <code>NXDOMAIN</code> — try one and watch where the walk stops. Names
           are shown fully qualified, with the trailing root dot that DNS really
-          uses and nobody ever types.
+          uses and nobody ever types. <strong>Click any machine</strong> to see
+          what it holds.
         </p>
         <p data-source class="source"></p>
       </form>
@@ -81,17 +82,31 @@
 
       <div data-graph class="stage"></div>
 
-      <section class="cache" data-cache hidden aria-label="Resolver cache">
-        <div class="cache-head">
-          <h2>What the resolver remembers</h2>
-          <span data-clock class="clock"></span>
-          <button data-wait type="button">Wait 5 minutes</button>
-        </div>
-        <div data-cache-table></div>
-      </section>
-
       <section aria-label="Resolution log">
         <h2>What just happened</h2>
+
+        <div class="transport">
+          <button data-testid="interaction" data-next type="button">
+            Next message
+          </button>
+          <button data-back type="button" aria-label="Previous message">
+            ←
+          </button>
+          <label class="speed">
+            <span class="speed-name">Speed</span>
+            <input
+              data-speed
+              type="range"
+              min="0"
+              max="6"
+              step="1"
+              value="0"
+              aria-describedby="speed-note"
+            />
+            <span id="speed-note" data-speed-note class="speed-note"></span>
+          </label>
+        </div>
+
         <div data-testid="output" class="log"></div>
       </section>
 
@@ -118,8 +133,9 @@
           The walk is the same. What changed is the <strong>question</strong>:
           it has a type, and the type decides what comes back. Every referral
           you watched in level 1 was made of <code>NS</code> records and the
-          <strong>glue</strong> addresses that make them usable — expand a
-          step and you are looking at the exact data the tree runs on.
+          <strong>glue</strong> addresses that make them usable — read a
+          message, or click the nameserver that sent it, and you are looking
+          at the exact data the tree runs on.
         </p>
         <p>
           Three answers behave differently. A <code>CNAME</code> is not an
@@ -164,8 +180,9 @@
           forging.
         </p>
         <p>
-          Nothing here <em>propagates</em>. Press <strong>wait</strong> and
-          watch entries drop out of the table as their TTLs run down. A change
+          Nothing here <em>propagates</em>. Open the
+          <strong>resolver</strong> and press <strong>wait</strong>, then watch
+          entries drop out of its memory as their TTLs run down. A change
           you make to a zone is not pushed anywhere — the world simply stops
           remembering the old answer, at a speed you chose in advance when you
           set the TTL.

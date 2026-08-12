@@ -167,6 +167,56 @@ it down here. Growing this file is the work of harness engineering, and the gap
 between this boilerplate and your own version is part of what your prototype
 says about the developer you're becoming.
 
+## Work against the spec and the marking criteria, every stage
+
+The published spec is the contract and the marking bands are how it is scored.
+Neither lives in this repo, so they are easy to drift from — which is exactly
+why they get consulted rather than remembered. Pull them from the course API
+(`/api/assessments/<slug>.json` or `/api/crits/<slug>.json`, fields `spec` and
+`body`) at the start of a session and re-read them at each of these points:
+
+- **Before planning.** Restate which spec lines the proposed work serves. Work
+  that serves no spec line is scope creep, however good the idea is.
+- **Before building.** Name the marking band being aimed at, and what separates
+  it from the band below. "Better" is not a target; the band's own words are.
+- **After building.** Walk the spec line by line against what now exists, and
+  say which lines are met, which are partial, and which are untouched.
+- **Before shipping.** Re-read both. The spec can be updated during the week,
+  and a contract you last read on Monday is not the one you are marked against.
+
+Two standing rules fall out of this:
+
+- **Weight the effort by the weights.** The criteria are not equal. Where
+  process carries the largest share, an hour spent making the record legible
+  outscores an hour spent on polish, and the plan should say so out loud.
+- **Sort every spec line into checkable or judged.** Checkable lines become
+  tests in `spec/`. Judged lines ("one strong idea with a point of view") get
+  named in the plan so they stay visible without pretending a test holds them.
+
+## Design principle: compress, then condense
+
+Aim for the most information in the least interface. A minimal UI is not one
+with less in it — it is one where nothing is spent twice. Prefer, in order:
+
+1. **Cut it.** Anything not serving the one idea is removed, not shrunk.
+2. **Fold it into something already on screen.** A value belongs on the object
+   it describes. Prefer direct manipulation of the thing over a separate
+   control that acts on it at a distance.
+3. **Reveal it on demand.** Detail hides behind the object it belongs to and
+   appears when asked for — progressive disclosure, so depth costs nothing
+   until it is wanted.
+4. **Only then, add a control.** A new persistent element is the last resort
+   and needs a justification the other three could not meet.
+
+Modern idioms that buy density cheaply, and are expected here: direct
+manipulation over form controls, hover and focus for detail rather than
+permanent labels, state carried in the visual (colour, weight, motion) rather
+than restated in prose, and one canvas reconfigured rather than stacked panels.
+
+This is a density target, not a sparseness target. Empty is as much a failure
+as cluttered: whitespace that carries no information is wasted, and so is a
+paragraph restating what the graphic already shows.
+
 ## Code Style Guide
 
 The general architecture and structure of any software solution should be planned and

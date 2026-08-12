@@ -30,6 +30,11 @@ export interface Graph {
   markEdge(from: string, to: string, label: string): void;
   clearStates(): void;
   onLayoutChange(handler: () => void): void;
+  // A machine is a thing you can open, not just a thing that lights up.
+  onNodeSelect(handler: (id: string | undefined) => void): void;
+  openInspector(id: string, title: string, body: HTMLElement): void;
+  closeInspector(): void;
+  inspecting(): string | undefined;
 }
 
 function el<K extends keyof SVGElementTagNameMap>(
@@ -83,6 +88,94 @@ export function createGraph(
   const positionsFor = (id: string): Point =>
     level.positions[layout][id] ?? { x: 0, y: 0 };
 
+  // The inspector is HTML over the SVG rather than a foreignObject: it holds
+  // scrolling tables, and foreignObject scrolling is not dependable enough to
+  // put the phone viewport on. Anchored to its node when there is room, a
+  // sheet across the bottom of the stage when there is not — CSS decides.
+  const inspector = document.createElement("div");
+  inspector.className = "inspector";
+  inspector.tabIndex = -1;
+  inspector.hidden = true;
+  container.append(inspector);
+
+  const selectHandlers: ((id: string | undefined) => void)[] = [];
+  let opened: string | undefined;
+
+  // SVG user units to pixels within the stage. Default preserveAspectRatio
+  // letterboxes, so the offset is not optional.
+  function anchor(): void {
+    if (opened === undefined) return;
+    const [vx = 0, vy = 0, vw = 1, vh = 1] = level.viewBox[layout]
+      .split(/\s+/)
+      .map(Number);
+    const rect = svg.getBoundingClientRect();
+    const base = container.getBoundingClientRect();
+    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const { x, y } = positionsFor(opened);
+    // Offsets are measured against the container the panel is positioned in,
+    // not the svg, because the stage has padding between the two.
+    const left = rect.left - base.left + (rect.width - vw * scale) / 2;
+    const top = rect.top - base.top + (rect.height - vh * scale) / 2;
+    inspector.style.setProperty("--anchor-x", `${String(left + (x - vx) * scale)}px`);
+    inspector.style.setProperty("--anchor-y", `${String(top + (y - vy) * scale)}px`);
+  }
+
+  function closeInspector(): void {
+    if (opened === undefined) return;
+    const was = opened;
+    opened = undefined;
+    inspector.hidden = true;
+    inspector.replaceChildren();
+    nodeGroups.get(was)?.removeAttribute("data-open");
+    for (const handler of selectHandlers) handler(undefined);
+  }
+
+  function openInspector(id: string, title: string, body: HTMLElement): void {
+    if (opened !== undefined && opened !== id) {
+      nodeGroups.get(opened)?.removeAttribute("data-open");
+    }
+    opened = id;
+    nodeGroups.get(id)?.setAttribute("data-open", "true");
+
+    const head = document.createElement("header");
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    const shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "inspector-close";
+    shut.setAttribute("aria-label", "Close");
+    shut.textContent = "×";
+    shut.addEventListener("click", () => {
+      closeInspector();
+      nodeGroups.get(id)?.focus();
+    });
+    head.append(heading, shut);
+
+    inspector.replaceChildren(head, body);
+    inspector.hidden = false;
+    anchor();
+  }
+
+  // Toggling, so the same click that opened a machine closes it.
+  function select(id: string): void {
+    if (opened === id) {
+      closeInspector();
+      return;
+    }
+    for (const handler of selectHandlers) handler(id);
+  }
+
+  inspector.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const was = opened;
+    closeInspector();
+    if (was !== undefined) nodeGroups.get(was)?.focus();
+  });
+
+  // Resize mid-interaction is one of the things this is marked on, so the
+  // anchor is recomputed rather than assumed to survive.
+  window.addEventListener("resize", anchor);
+
   function addEdge(key: string): void {
     const line = el("line", {
       class: "edge",
@@ -103,7 +196,23 @@ export function createGraph(
 
     // Geometry stays in attributes, not CSS: the CSS geometry properties
     // (x/y/width/height) are not portable enough to bet the page on.
-    const group = el("g", { class: "node", "data-node": id });
+    // A real button, not a click handler on a shape: the marker tabs through
+    // this page, and an SVG group has none of that for free.
+    const group = el("g", {
+      class: "node",
+      "data-node": id,
+      role: "button",
+      tabindex: "0",
+      "aria-label": `${label.title} — ${label.role}. Show its records.`,
+    });
+    group.addEventListener("click", () => {
+      select(id);
+    });
+    group.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault(); // Space would scroll the page out from under it
+      select(id);
+    });
     if (entering) group.setAttribute("data-entering", "true");
     const box = el("rect", {
       class: "node-box",
@@ -181,6 +290,8 @@ export function createGraph(
         .map((m) => `${m.at}${arrowFor(positionsFor(m.from), positionsFor(m.to))}`)
         .join(" ");
     }
+
+    anchor();
   }
 
   function resetEdges(): void {
@@ -196,6 +307,10 @@ export function createGraph(
   function syncTo(next: LevelConfig): void {
     const first = nodeGroups.size === 0;
     level = next;
+
+    // A machine's records belong to the level that defined them, so an open
+    // panel cannot survive into a level that may not contain that machine.
+    closeInspector();
 
     const wanted = new Set(next.edges.map(([from, to]) => `${from}:${to}`));
     for (const [key, line] of edgeLines) {
@@ -296,5 +411,11 @@ export function createGraph(
     onLayoutChange(handler) {
       handlers.push(handler);
     },
+    onNodeSelect(handler) {
+      selectHandlers.push(handler);
+    },
+    openInspector,
+    closeInspector,
+    inspecting: () => opened,
   };
 }

@@ -195,6 +195,7 @@ button:disabled {
 /* Graph */
 
 .stage {
+  position: relative; /* the inspector anchors inside it */
   margin: 1.5rem 0;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -234,6 +235,7 @@ button:disabled {
    transform property is not animatable. */
 .node {
   opacity: 1;
+  cursor: pointer;
   transition:
     transform 0.5s ease,
     opacity 0.45s ease;
@@ -391,14 +393,44 @@ button:disabled {
 }
 
 .step {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
   padding: 0.5rem 0.75rem;
   background: var(--panel);
   border-left: 4px solid var(--query);
   border-radius: 0 6px 6px 0;
   font-size: 0.92rem;
+}
+
+/* The transcript is the scrubber, so each row is a seek control. It has to
+   look like a line of a log until it is worth pressing. */
+.step-seek {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-seek:disabled {
+  cursor: default;
+}
+
+/* Not yet reached: the count is the information, not the content. Reading
+   ahead would give away the walk the visitor is here to watch. */
+.step[data-reached="false"] {
+  border-left-color: var(--line);
+  opacity: 0.45;
+}
+
+.step[data-current="true"] {
+  box-shadow: inset 0 0 0 1px var(--line);
+  background: color-mix(in srgb, var(--query) 5%, var(--panel));
 }
 
 .step[data-kind="referral"] {
@@ -429,6 +461,12 @@ button:disabled {
 .step-label {
   font-weight: 600;
   min-width: 8.5rem;
+}
+
+.step[data-reached="false"] .step-label {
+  min-width: 0;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .step-note {
@@ -544,32 +582,25 @@ tr[data-role="empty"] .record-role {
   color: var(--cached);
 }
 
-/* The resolver's memory, which the graph can only show the effects of. */
-
-.cache {
-  margin: 1.5rem 0;
-  padding: 0.75rem 1rem 1rem;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
+/* The resolver's memory. It lives inside the resolver's own panel rather
+   than in a section of its own — a cache belongs to a machine. */
 
 .cache-head {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
   flex-wrap: wrap;
-}
-
-.cache-head h2 {
-  margin: 0;
-  flex: 1 1 auto;
+  margin-bottom: 0.5rem;
 }
 
 .clock {
   font-family: ui-monospace, monospace;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.cache-head .clock {
+  flex: 1 1 auto;
 }
 
 .cache-empty {
@@ -732,5 +763,141 @@ code {
   button {
     color: #0d1117;
     background: #e9eef4;
+  }
+}
+
+/* Transport. One button carries the action and the counter, and one slider
+   carries both the pacing and whether it is paced at all — a separate
+   play/pause would be a second control saying the same thing. */
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.transport [data-next] {
+  font-variant-numeric: tabular-nums;
+}
+
+.transport [data-back] {
+  padding-inline: 0.7rem;
+  font-family: ui-monospace, monospace;
+}
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.speed input {
+  width: 7rem;
+}
+
+.speed-note {
+  min-width: 11ch;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+/* A machine is something you can open. */
+
+.node:focus-visible {
+  outline: none;
+}
+
+.node:focus-visible .node-box,
+.node[data-open="true"] .node-box {
+  stroke: var(--query);
+  stroke-width: 3;
+}
+
+/* The packet only exists while a message is actually in flight. */
+.packet[data-flying="false"] {
+  opacity: 0;
+}
+
+/* The inspector. HTML over the SVG rather than a foreignObject, because it
+   holds scrolling tables. Anchored beside its machine where there is room,
+   and a sheet across the stage where there is not. */
+
+.inspector {
+  position: absolute;
+  z-index: 2;
+  left: var(--anchor-x, 50%);
+  top: var(--anchor-y, 50%);
+  width: min(23rem, 70%);
+  max-height: 60%;
+  overflow-y: auto;
+  transform: translate(-50%, calc(-100% - 2.5rem));
+  padding: 0.75rem 0.9rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgb(15 23 32 / 18%);
+}
+
+.inspector:focus-visible {
+  outline: 2px solid var(--query);
+}
+
+.inspector header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.inspector h3 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.inspector h4 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.inspector p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.inspector-close {
+  padding: 0 0.4rem;
+  border: 0;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* No room to sit beside a machine at phone width, so it stops trying. */
+@media (width <= 700px) {
+  .inspector {
+    left: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    max-height: 55%;
+    transform: none;
+    border-radius: 10px 10px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node {
+    transition: none;
   }
 }

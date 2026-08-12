@@ -161,6 +161,38 @@ export function cacheTable(held: CacheEntry[], now: number): HTMLElement {
   return scroller;
 }
 
+const ZONE_COLUMNS = ["Name", "TTL", "Type", "Data"];
+
+// A machine's own zone data, at rest. Unlike recordTable this carries no
+// role: a record only acquires one by being the answer to something, and
+// nothing has been asked here — this is just what the server holds.
+export function zoneRecords(records: DNSRecord[]): HTMLElement {
+  const scroller = document.createElement("div");
+  scroller.className = "records-scroll";
+  const table = document.createElement("table");
+  table.className = "records";
+  scroller.append(table);
+
+  const head = table.createTHead().insertRow();
+  for (const column of ZONE_COLUMNS) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = column;
+    head.append(th);
+  }
+
+  const body = table.createTBody();
+  for (const record of records) {
+    const row = body.insertRow();
+    cell(row, record.name);
+    cell(row, humanTtl(record.ttl), "record-ttl");
+    cell(row, record.type, "record-type");
+    cell(row, record.data);
+  }
+
+  return scroller;
+}
+
 export function recordTable(
   records: DNSRecord[],
   kind: StepKind,
