@@ -186,9 +186,10 @@ why they get consulted rather than remembered. Pull them from the course API
 
 Two standing rules fall out of this:
 
-- **Weight the effort by the weights.** The criteria are not equal. Where
-  process carries the largest share, an hour spent making the record legible
-  outscores an hour spent on polish, and the plan should say so out loud.
+- **Weight the effort by the weights.** The criteria are not equal. For
+  assignment 1 they are process 45%, response to the brief 35%, deployed
+  artefact 20% — so an hour on the idea or on making the record legible
+  outscores an hour on polish, and the plan should say so out loud.
 - **Sort every spec line into checkable or judged.** Checkable lines become
   tests in `spec/`. Judged lines ("one strong idea with a point of view") get
   named in the plan so they stay visible without pretending a test holds them.
@@ -216,6 +217,33 @@ than restated in prose, and one canvas reconfigured rather than stacked panels.
 This is a density target, not a sparseness target. Empty is as much a failure
 as cluttered: whitespace that carries no information is wasted, and so is a
 paragraph restating what the graphic already shows.
+
+## Design principle: manipulation, not narration
+
+The visitor must change the system, not their position in a story about it. A
+control that only advances a fixed sequence is narration with a button on it,
+and no amount of polish on that button makes the page interactive.
+
+- **Every parameter the explanation depends on is a parameter the visitor can
+  set**, and the outcome has to visibly move when they set it. A constant the
+  argument leans on is a knob that has not been built yet.
+- **Prefer knobs that can produce a bad outcome.** A model you cannot break
+  teaches nothing about why it holds up. Failure states reachable by the
+  visitor's own hand are the point, not an edge case to be defended against.
+- **Name the pairs before building.** For each control, say which parameter it
+  changes and which readout moves in response. A control with no readout is a
+  toy; a readout with no control is a chart.
+- **Count the verbs before shipping.** If the honest answer is "two buttons",
+  the artefact is a diagram, whatever else is true of it.
+
+Sequencing controls — play, step, speed — are a transport for a model, never
+the interaction itself. They earn their place only once there is a model to
+pace, and they are not evidence that the page is interactive.
+
+This sits in tension with compress-then-condense, deliberately. That principle
+removes surface; this one demands the visitor have things to do. They resolve
+the same way every time: a knob belongs on the object it changes, so growing
+what the visitor can do should grow the page's density rather than its area.
 
 ## Code Style Guide
 
