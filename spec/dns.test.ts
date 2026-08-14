@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { RECURSOR, STUB, resolve, respond } from "../src/dns/resolve.js";
-import { ZONES } from "../src/levels/level1.js";
+import { WORLD } from "./world.js";
 import type { Zone } from "../src/dns/types.js";
 
 // Protocol tests. These run headless because src/dns never touches the DOM —
 // if that stops being true, these tests are the first thing to break.
 
 const zoneOf = (origin: string): Zone => {
-  const zone = ZONES.find((z) => z.origin === origin);
+  const zone = WORLD.find((z) => z.origin === origin);
   if (zone === undefined) throw new Error(`no zone named ${origin}`);
   return zone;
 };
@@ -52,7 +52,7 @@ describe("a nameserver answers, refers, or denies — never looks things up", ()
 });
 
 describe("the recursor walks the tree, the client does not", () => {
-  const result = resolve(QUERY, ZONES);
+  const result = resolve(QUERY, WORLD);
 
   it("resolves to the authoritative address", () => {
     expect(result.outcome).toBe("answered");
@@ -82,19 +82,19 @@ describe("the recursor walks the tree, the client does not", () => {
   });
 
   it("returns NXDOMAIN for a name the tree does not hold", () => {
-    const missing = resolve({ name: "nope.anu.edu.au.", type: "A" }, ZONES);
+    const missing = resolve({ name: "nope.anu.edu.au.", type: "A" }, WORLD);
     expect(missing.outcome).toBe("nxdomain");
   });
 
   it("resolves a name under a different TLD", () => {
-    const result = resolve({ name: "www.google.com", type: "A" }, ZONES);
+    const result = resolve({ name: "www.google.com", type: "A" }, WORLD);
     expect(result.outcome).toBe("answered");
     expect(result.answer[0]?.data).toBe("142.251.151.119");
   });
 
   it("reuses the one TLD seat for whichever zone is being asked", () => {
-    const au = resolve({ name: "www.anu.edu.au", type: "A" }, ZONES);
-    const com = resolve({ name: "www.google.com", type: "A" }, ZONES);
+    const au = resolve({ name: "www.anu.edu.au", type: "A" }, WORLD);
+    const com = resolve({ name: "www.google.com", type: "A" }, WORLD);
     const zoneAtTld = (r: typeof au) =>
       r.steps.find((s) => s.to === "tld")?.zone;
 
@@ -103,7 +103,7 @@ describe("the recursor walks the tree, the client does not", () => {
   });
 
   it("accepts a name without its trailing root dot", () => {
-    expect(resolve({ name: "www.anu.edu.au", type: "A" }, ZONES).outcome).toBe(
+    expect(resolve({ name: "www.anu.edu.au", type: "A" }, WORLD).outcome).toBe(
       "answered",
     );
   });
@@ -170,7 +170,7 @@ describe("a CNAME is an alias, so resolution starts over", () => {
 // there, and the visitor is about to be handed a switch that causes the first.
 describe("a server that does not answer", () => {
   const without = (server: string): Zone[] =>
-    ZONES.filter((z) => z.server !== server);
+    WORLD.filter((z) => z.server !== server);
 
   it("reports a timeout rather than inventing a missing name", () => {
     const result = resolve(QUERY, without("auth"));
@@ -193,7 +193,7 @@ describe("a server that does not answer", () => {
   });
 
   it("still says nxdomain for a name that genuinely does not exist", () => {
-    const result = resolve({ name: "nowhere.au.", type: "A" }, ZONES);
+    const result = resolve({ name: "nowhere.au.", type: "A" }, WORLD);
     expect(result.outcome).toBe("nxdomain");
   });
 });

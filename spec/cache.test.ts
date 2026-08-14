@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { answerFor, entries, remember, startZone } from "../src/dns/cache.js";
 import type { Cache } from "../src/dns/cache.js";
 import { resolve } from "../src/dns/resolve.js";
-import { LEVEL3_ZONES } from "../src/levels/level3.js";
+import { WORLD } from "./world.js";
 import type { ResolutionStep } from "../src/dns/types.js";
 
 // Caching is the level's subject, and the claim being tested is a specific
@@ -16,7 +16,7 @@ const sent = (steps: ResolutionStep[]): number =>
   steps.filter((step) => step.from !== step.to).length;
 
 const warm = (name: string, cache: Cache, now = 0): ResolutionStep[] =>
-  resolve({ name, type: "A" }, LEVEL3_ZONES, { cache, now }).steps;
+  resolve({ name, type: "A" }, WORLD, { cache, now }).steps;
 
 describe("the cache stores a delegation under the child it delegates to", () => {
   it("keys a referral by the zone it hands you, not the parent", () => {
@@ -94,7 +94,7 @@ describe("a warm resolver sends fewer messages", () => {
   });
 
   it("leaves an uncached resolver exactly as level 1 had it", () => {
-    const bare = resolve({ name: "anu.edu.au", type: "A" }, LEVEL3_ZONES);
+    const bare = resolve({ name: "anu.edu.au", type: "A" }, WORLD);
     expect(bare.steps.some((step) => step.kind === "cached")).toBe(false);
     expect(asked(bare.steps, "root")).toBe(true);
   });

@@ -1,4 +1,3 @@
-import type { LevelConfig } from "../levels/types.js";
 import type { LayoutName, Point, Scene } from "./layout.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -33,8 +32,6 @@ export interface Graph {
   // A function of the viewport rather than a finished scene: the graph knows
   // when the layout changed, so it should be the one to ask again.
   setScene(make: (layout: Layout) => Scene): void;
-  // Levels, translated. Goes when they do, next commit.
-  setLevel(level: LevelConfig): void;
   setNodeState(id: string, state: string): void;
   setNodeZone(id: string, zone: string): void;
   // A number on the machine it belongs to, rather than in a table beside it.
@@ -69,35 +66,13 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
-// The levels' own shape, translated. Kept only while the page still runs on
-// levels; it goes with them in the next commit.
-export function sceneFromLevel(level: LevelConfig, layout: Layout): Scene {
-  const widths: Record<string, number> = {};
-  const shapes: Record<string, "box" | "dot"> = {};
-  for (const id of Object.keys(level.nodes)) {
-    widths[id] = 148;
-    shapes[id] = "box";
-  }
-  return {
-    nodes: level.nodes,
-    shapes,
-    widths,
-    edges: level.edges,
-    positions: level.positions[layout],
-    viewBox: level.viewBox[layout],
-  };
-}
-
 export function createGraph(
   container: HTMLElement,
-  initial: LevelConfig | ((layout: Layout) => Scene),
+  initial: (layout: Layout) => Scene,
 ): Graph {
   const media = window.matchMedia(NARROW);
   let layout: Layout = media.matches ? "narrow" : "wide";
-  let make =
-    typeof initial === "function"
-      ? initial
-      : (l: Layout): Scene => sceneFromLevel(initial, l);
+  let make = initial;
   let scene = make(layout);
 
   const svg = el("svg", {
@@ -434,10 +409,6 @@ export function createGraph(
     nodeAt: positionsFor,
     setScene(next) {
       make = next;
-      syncTo(make(layout));
-    },
-    setLevel(level) {
-      make = (l) => sceneFromLevel(level, l);
       syncTo(make(layout));
     },
     setNodeState(id, state) {
