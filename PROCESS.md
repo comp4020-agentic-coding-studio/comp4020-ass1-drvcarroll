@@ -1,83 +1,115 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and each brief adds its own word count and moment count.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+An interactive explainer for DNS at the scale it actually runs at. The page
+opens on the smallest network that is still DNS — one machine, one resolver, one
+authoritative server — and you grow it, then set the query rate, the TTL, the
+record mix, each server's capacity, whether it is up, and where an attacker is
+standing. The argument is one you have to break to believe: the hierarchy is
+held up by memory rather than by capacity, and the same memory is what carries
+one lie to people who never met the liar. Shorten the TTL and the root's load
+climbs; take an authority offline under a long TTL and almost nothing happens
+until the entries expire.
+
+It began as something else. The first two thirds of the history are a four-level
+DNS walkthrough, and that version worked — it just was not interactive, and the
+whole second half of this repo is the record of admitting that.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+### 1. Counting the verbs, and losing
 
-1. **what happened** --- the problem, or the thing the agent got wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+The four-level version was finished and green
+([`100af66`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/100af66)).
+Reading it against the brief's own exemplars, the honest description of what a
+visitor could do was "click Next, or pick a different level" — narration with a
+button on it. The obvious move was to add controls to the existing levels. I
+took the harder one and made the interaction the *subject*: one parameterised
+world, growth instead of levels.
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** rather than in another prompt --- a rule added to
-`CLAUDE.md`, a check wired up, an attempt thrown away: re-prompting until it
-passes is the routine case, and changing what the agent works against is the
-skilled one.
+What made it a process change rather than a rewrite is that the correction went
+into the harness first, before any code
+([`31a8e8c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/31a8e8c)):
+a **manipulation, not narration** principle in `CLAUDE.md` that names the test I
+had just failed — *count the verbs before shipping; if the honest answer is "two
+buttons", the artefact is a diagram* — and states how it resolves against the
+density principle already there. Every design call in the eleven commits after
+it was made against that section rather than against my memory of this
+conversation.
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
+### 2. Proving the argument before drawing it
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+The riskiest part of the pivot was that the claim might simply not hold in a
+model I had built. So the whole simulation landed headless and fully asserted
+while the page was still showing the old levels
+([`625366e...704f74f`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/compare/625366e...704f74f)).
+`spec/sim.test.ts` is where the page's thesis is executable: same seed, same
+load, `ttl: 3600` against `ttl: 1` gives a hit rate above 0.85 against below
+0.25 and an order of magnitude less work at the root; an on-path attacker has
+more victims than it has conversations; DNSSEC takes that to zero.
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
+How I knew it was right: those tests were written to be *failable* and two of
+them failed first. The one that mattered was determinism — my first arrival
+model drew "how many queries this frame", which made every number on the page a
+function of frame rate. The fix was per-machine exponential inter-arrival times
+in a sorted queue, and the test that holds it compares one `stepTo(state, 300)`
+against three thousand small steps. A second stream (`chance`, separate from
+`load`) exists for the same reason: moving the TTL must not change *who asks
+what and when*, or a comparison between two TTLs is comparing two different
+worlds.
 
-> the prompt, verbatim
+### 3. Throwing away the best code in the repo
 
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
+The earlier version fetched real delegation data over DNS-over-HTTPS — 432 lines
+with tests, and the most technically interesting thing here. I deleted it
+([`ff66c11`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/ff66c11)).
+Real zone data cannot be grown, given a TTL knob, a capacity ceiling and an
+attacker without the page claiming a fidelity it does not have, and a page that
+needs the network to teach anything can fail at the crit. Saying plainly that
+this is a seeded model is the more honest artefact, and the best sentence in the
+deleted code — on why a browser cannot watch a resolver work — survives as the
+page's opening line.
 
-### A worked moment, for shape
+### 4. Where a knob belongs
 
-Delete this section along with the rest of the boilerplate --- it's here to show
-the four jobs in one paragraph, not to be imitated in content.
+`compress, then condense` says a value belongs on the object it describes; the
+new principle says the visitor needs things to do. Sixteen new parameters could
+have been sixteen new controls. Instead the page's only persistent controls are
+the transport and the speed slider: growth is a `＋`/`−` pair *in the picture*
+beneath each tier
+([`602d00e`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/602d00e)),
+and everything else folds into the inspector of the thing it changes — TTL above
+the record table it governs, capacity and the power switch on the server,
+defences on the resolver that would check them
+([`58ed5bb`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/58ed5bb)).
 
-> The date formatter kept coming back with `toLocaleDateString()` and no locale
-> argument, so the same build rendered differently on my machine and in CI. I'd
-> already re-prompted it twice, which fixed the line but not the habit, so the
-> third time I put the rule in `CLAUDE.md` instead
-> ([`3f9ac21`](https://github.com/YOUR-ORG/YOUR-REPO/commit/3f9ac21)) and added
-> a spec test that fails on a bare `toLocaleDateString`. That's what told me it
-> had actually taken: the test went red against the old code and green against
-> the new, and the next two features it wrote passed it without prompting
-> ([`3f9ac21...b7e0d14`](https://github.com/YOUR-ORG/YOUR-REPO/compare/3f9ac21...b7e0d14)).
+That commit also carries the bug that only appears once controls live inside a
+panel: a knob rebuilds the panel it sits in, so the button you just pressed
+stops existing and the keyboard is thrown out mid-turn. `apply()` now finds it
+again by its label.
 
-## Before you ship
+### 5. The checks that were worth wiring
 
-`pnpm check:evidence` verifies your citations resolve to real commits, that the
-current reflection entry is in `reflections/`, and that your `CLAUDE.md` is
-there --- before a marker ever opens the file. It checks that your map is
-traceable, not that it is good: the marker judges whether your small,
-deliberately chosen set of moments shows real judgement and reflection. A green
-check is not a substitute for that curation.
+Two sensors caught things looking at the page could not.
 
-Images are deliberately not checked, because whether one renders is visible the
-moment you look. Open this file on GitHub and look at it before you ship.
+`spec/layout.test.ts` asserts the 390 px claim — nothing outside its viewBox,
+nothing overlapping, tiers in order — across a *grid* of counts at both
+viewports
+([`9121d7f`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/9121d7f)).
+Once the visitor builds the world, "it looks fine at 390" has to hold for every
+world they can build, which is a test rather than a screenshot.
+
+`spec/page.test.ts` boots `index.html` into a DOM and presses the controls
+([`c6abf7f`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/c6abf7f)).
+Every other suite tests one layer; this asserts the claim the pivot rests on —
+that pressing the picture reaches the simulation. It immediately found
+`render.ts` betting on an SVG interface that not every DOM defines.
+
+## Where to look
+
+The pivot is
+[`31a8e8c...c6abf7f`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/compare/31a8e8c...c6abf7f),
+twelve commits in build order, each one green. `STRUCTURE.md` is the design
+argument and was rewritten last, once the shape was known; `CLAUDE.md`'s two
+design principles are the rules the code was held to.
