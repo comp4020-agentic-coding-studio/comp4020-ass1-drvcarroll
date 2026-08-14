@@ -20,7 +20,27 @@ export type LayoutName = keyof Positions;
 
 // A machine you can read is a box; one of a crowd is a dot. Past a few dozen
 // users a label each is the "spent twice" failure, so dots carry none.
-export type Shape = "box" | "dot";
+export type Shape = "box" | "dot" | "ghost";
+
+// The tiers the visitor can grow, by their index in `topology.tiers`, and the
+// SimConfig field each one counts. Growth is the interaction, so its controls
+// are nodes in the picture rather than a panel acting on it from a distance.
+export type Growable = "authorities" | "resolvers" | "users";
+
+export const GROW = "grow:";
+export const SHRINK = "shrink:";
+
+const GROWABLE: Record<number, Growable> = {
+  2: "authorities",
+  3: "resolvers",
+  4: "users",
+};
+
+const NOUN: Record<Growable, string> = {
+  authorities: "authoritative nameserver",
+  resolvers: "resolver",
+  users: "machine",
+};
 
 export interface Scene {
   nodes: Record<NodeId, NodeLabel>;
@@ -46,6 +66,11 @@ interface Metrics {
 }
 
 const BOX_HEIGHT = 60;
+// The ±  pair under a tier. Small: it is an affordance on the picture, not a
+// second interface competing with it.
+const CONTROL_SIZE = 24;
+const CONTROL_ROW = 36;
+const CONTROL_PITCH = 34;
 const MAX_BOX = 148;
 const MIN_BOX = 64;
 // Below this the boxes in a row would overlap, so the tier wraps instead.
@@ -150,10 +175,36 @@ function placeDots(
   return sizes.length * m.dotRow;
 }
 
+// Under the tier it grows, centred, so which count it changes needs no label.
+function placeControls(
+  field: Growable,
+  top: number,
+  m: Metrics,
+  scene: Scene,
+): number {
+  const y = top + CONTROL_SIZE / 2;
+  for (const [index, prefix] of [SHRINK, GROW].entries()) {
+    const id = `${prefix}${field}`;
+    scene.nodes[id] = {
+      title: prefix === GROW ? "+" : "\u2212",
+      role: `${prefix === GROW ? "Add" : "Remove"} a ${NOUN[field]}`,
+    };
+    scene.positions[id] = {
+      x: m.width / 2 + (index - 0.5) * CONTROL_PITCH,
+      y,
+    };
+    scene.shapes[id] = "ghost";
+    scene.widths[id] = CONTROL_SIZE;
+  }
+  return CONTROL_ROW;
+}
+
 export function layout(topology: Topology, name: LayoutName): Scene {
   const m = METRICS[name];
   const scene: Scene = {
-    nodes: topology.nodes,
+    // Copied: the control nodes are the picture's business, not the
+    // simulation's, and writing them into the topology would be a lie.
+    nodes: { ...topology.nodes },
     shapes: {},
     widths: {},
     edges: topology.edges,
@@ -169,7 +220,10 @@ export function layout(topology: Topology, name: LayoutName): Scene {
     const used = isUsers
       ? placeDots(ids, cursor, m, scene)
       : placeBoxes(ids, cursor, m, scene);
-    cursor += used + m.tierGap;
+    cursor += used;
+    const field = GROWABLE[tier];
+    if (field !== undefined) cursor += placeControls(field, cursor, m, scene);
+    cursor += m.tierGap;
   }
 
   const height = cursor - m.tierGap + m.bottom;

@@ -273,6 +273,33 @@ button:disabled {
   transition: fill 0.2s;
 }
 
+/* Growth as an affordance on the picture: a target sitting where the thing it
+   adds will appear. */
+.node-ghost {
+  fill: var(--bg);
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+
+.node:hover .node-ghost {
+  fill: var(--panel);
+  stroke: var(--query);
+  stroke-dasharray: none;
+}
+
+.node-glyph {
+  text-anchor: middle;
+  font-size: 16px;
+  font-weight: 700;
+  fill: var(--muted);
+  pointer-events: none;
+}
+
+.node:hover .node-glyph {
+  fill: var(--query);
+}
+
 /* The machine's own number, on the machine. */
 .node-metric {
   text-anchor: middle;

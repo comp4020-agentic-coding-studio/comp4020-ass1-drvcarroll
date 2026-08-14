@@ -1,15 +1,23 @@
 import { NO_DEFENCES } from "../dns/attack.js";
 import { entries } from "../dns/cache.js";
 import { SPEEDS } from "../graph/animate.js";
-import { layout, type LayoutName, type Scene } from "../graph/layout.js";
+import {
+  GROW,
+  layout,
+  SHRINK,
+  type Growable,
+  type LayoutName,
+  type Scene,
+} from "../graph/layout.js";
 import { createGraph } from "../graph/render.js";
 import {
   createSim,
   drainPackets,
+  reconfigure,
   stepTo,
   type SimState,
 } from "../sim/engine.js";
-import type { SimConfig } from "../sim/types.js";
+import { LIMITS, type SimConfig } from "../sim/types.js";
 import { cacheTable, zoneRecords } from "./records.js";
 import { band, headline, intensity, nodeMetric } from "./readouts.js";
 
@@ -98,8 +106,31 @@ export function start(): void {
     graph.openInspector(id, state.topology.nodes[id]?.title ?? id, body);
   };
 
+  // The world is rebuilt around what changed; the counters keep their history,
+  // because what already happened did happen.
+  const apply = (patch: Partial<SimConfig>): void => {
+    reconfigure(state, { ...state.config, ...patch });
+    graph.setScene(scene);
+    const open = graph.inspecting();
+    if (open !== undefined) inspect(open);
+    paint();
+  };
+
+  // Growing a tier by pressing the picture. The step is a share of the tier so
+  // that reaching a readable crowd is a few presses rather than sixty.
+  const step = (field: Growable, direction: number): void => {
+    const at = state.config[field];
+    const size = Math.max(1, Math.round(at * 0.5));
+    const limit = LIMITS[field];
+    const next = Math.min(limit.max, Math.max(limit.min, at + size * direction));
+    if (next !== at) apply({ [field]: next });
+  };
+
   graph.onNodeSelect((id) => {
-    if (id !== undefined) inspect(id);
+    if (id === undefined) return;
+    if (id.startsWith(GROW)) step(id.slice(GROW.length) as Growable, 1);
+    else if (id.startsWith(SHRINK)) step(id.slice(SHRINK.length) as Growable, -1);
+    else inspect(id);
   });
 
   const paint = (): void => {

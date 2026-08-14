@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NO_DEFENCES } from "../src/dns/attack.js";
 import type { LayoutName, Scene } from "../src/graph/layout.js";
-import { layout } from "../src/graph/layout.js";
+import { GROW, layout, SHRINK } from "../src/graph/layout.js";
 import { buildTopology } from "../src/sim/topology.js";
 import type { SimConfig } from "../src/sim/types.js";
 import { LIMITS } from "../src/sim/types.js";
@@ -135,5 +135,28 @@ describe("growth changes the picture", () => {
     expect(scene(config, "wide").positions).toEqual(
       scene(config, "wide").positions,
     );
+  });
+});
+
+describe("the tiers the visitor can grow", () => {
+  // Growth is the interaction, so its controls are part of the picture and
+  // land in the scene rather than in a panel acting on it from a distance.
+  const grown = scene({}, "wide");
+
+  it("puts a pair of controls under each growable tier", () => {
+    for (const field of ["authorities", "resolvers", "users"] as const) {
+      expect(grown.shapes[`${GROW}${field}`]).toBe("ghost");
+      expect(grown.shapes[`${SHRINK}${field}`]).toBe("ghost");
+    }
+  });
+
+  it("names what each one adds, since a glyph alone says nothing", () => {
+    expect(grown.nodes[`${GROW}resolvers`]?.role).toMatch(/Add a resolver/);
+  });
+
+  it("leaves the simulation's own nodes alone", () => {
+    const topology = buildTopology(base);
+    layout(topology, "wide");
+    expect(topology.nodes[`${GROW}users`]).toBeUndefined();
   });
 });

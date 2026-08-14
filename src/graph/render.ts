@@ -213,7 +213,9 @@ export function createGraph(
   function addNode(id: string, entering: boolean): void {
     const label = scene.nodes[id];
     if (label === undefined) return;
-    const dot = scene.shapes[id] === "dot";
+    const shape = scene.shapes[id];
+    const dot = shape === "dot";
+    const ghost = shape === "ghost";
 
     // Geometry stays in attributes, not CSS: the CSS geometry properties
     // (x/y/width/height) are not portable enough to bet the page on.
@@ -225,7 +227,9 @@ export function createGraph(
       "data-shape": dot ? "dot" : "box",
       role: "button",
       tabindex: "0",
-      "aria-label": `${label.title} — ${label.role}. Show its records.`,
+      "aria-label": ghost
+        ? label.role
+        : `${label.title} — ${label.role}. Show its records.`,
     });
     group.addEventListener("click", () => {
       select(id);
@@ -240,7 +244,15 @@ export function createGraph(
     // A dot carries no text at all. One label per machine is exactly the
     // "spent twice" failure at forty of them, so identity moves to the
     // inspector and the crowd is left to read as a crowd.
-    if (dot) {
+    if (ghost) {
+      // The affordance for growing a tier: a target you press, sitting where
+      // the thing it adds will appear.
+      const circle = el("circle", { class: "node-ghost", cx: "0", cy: "0", r: "5" });
+      const glyph = el("text", { class: "node-glyph", x: "0", y: "5" });
+      glyph.textContent = label.title;
+      nodeShapes.set(id, circle);
+      group.append(circle, glyph);
+    } else if (dot) {
       const circle = el("circle", { class: "node-dot", cx: "0", cy: "0", r: "5" });
       nodeShapes.set(id, circle);
       group.append(circle);
