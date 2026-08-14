@@ -129,6 +129,9 @@ export interface ResolveOptions {
   // reproducible in a test and steerable by the visitor.
   now?: number;
   client?: NodeId;
+  // Which resolver is doing the walking. One machine per level, but many once
+  // the visitor grows the tier — and then the steps have to name which.
+  recursor?: NodeId;
   // Somebody else answering the question the resolver just asked. Returns
   // undefined when nobody is attacking this particular query.
   intercept?: (q: Question, zone: Zone, txid: number) => Forgery | undefined;
@@ -144,13 +147,20 @@ export function resolve(
   zones: Zone[],
   options: ResolveOptions = {},
 ): ResolutionResult {
-  const { cache, now = 0, client = STUB, intercept, txid } = options;
+  const {
+    cache,
+    now = 0,
+    client = STUB,
+    recursor = RECURSOR,
+    intercept,
+    txid,
+  } = options;
   const question: Question = { name: fqdn(q.name), type: q.type };
   const steps: ResolutionStep[] = [];
 
   steps.push({
     from: client,
-    to: RECURSOR,
+    to: recursor,
     kind: "query",
     records: [],
     note: `Where is ${question.name}? (${question.type})`,
@@ -159,7 +169,7 @@ export function resolve(
   // A message the resolver sends to itself: same node at both ends, so the
   // packet visibly goes nowhere.
   const recall = (records: DNSRecord[], note: string): void => {
-    steps.push({ from: RECURSOR, to: RECURSOR, kind: "cached", records, note });
+    steps.push({ from: recursor, to: recursor, kind: "cached", records, note });
   };
 
   // A zone the resolver believes in — because the root always exists, or
@@ -217,7 +227,7 @@ export function resolve(
     const id = txid?.();
 
     steps.push({
-      from: RECURSOR,
+      from: recursor,
       to: zone.server,
       kind: "query",
       records: [],
@@ -234,7 +244,7 @@ export function resolve(
     if (forgery !== undefined && !forgery.accepted) {
       steps.push({
         from: ATTACKER,
-        to: RECURSOR,
+        to: recursor,
         kind: "rejected",
         records: forgery.response.records,
         note: forgery.note,
@@ -247,7 +257,7 @@ export function resolve(
     if (cache !== undefined) remember(cache, current, response, now);
     steps.push({
       from: believed ? ATTACKER : zone.server,
-      to: RECURSOR,
+      to: recursor,
       kind: believed ? "forged" : response.kind,
       records: response.records,
       zone: believed ? undefined : zone.origin,
@@ -288,8 +298,8 @@ export function resolve(
   if (outcome === "nxdomain" && zone === undefined && unreachable !== undefined) {
     outcome = "timeout";
     steps.push({
-      from: RECURSOR,
-      to: RECURSOR,
+      from: recursor,
+      to: recursor,
       kind: "timeout",
       records: [],
       zone: unreachable,
@@ -298,7 +308,7 @@ export function resolve(
   }
 
   steps.push({
-    from: RECURSOR,
+    from: recursor,
     to: client,
     kind: outcome === "answered" ? "answer" : outcome,
     records: answer,
