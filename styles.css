@@ -50,54 +50,6 @@ h2 {
   color: var(--muted);
 }
 
-/* Levels are a control, not navigation: one page reconfigures itself. */
-
-.levels {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  max-width: 62rem;
-  margin: 0 auto;
-}
-
-/* Lookup control */
-
-.lookup {
-  margin: 2rem 0 1rem;
-}
-
-.lookup label {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.lookup-row {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.4rem;
-}
-
-input[type="text"] {
-  flex: 1 1 16rem;
-  padding: 0.7rem 0.85rem;
-  font: inherit;
-  font-family: ui-monospace, monospace;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-select {
-  padding: 0.7rem 0.6rem;
-  font: inherit;
-  font-family: ui-monospace, monospace;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  color: inherit;
-}
-
 button {
   padding: 0.7rem 1.4rem;
   font: inherit;
@@ -113,43 +65,11 @@ button:hover {
   background: var(--query);
 }
 
-/* Nothing to forge until you have chosen where you are standing. */
+/* A press that would do nothing says so rather than doing nothing. */
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   background: var(--muted);
-}
-
-.cache-head button {
-  padding: 0.35rem 0.8rem;
-  font-size: 0.85rem;
-}
-
-.threat-head button {
-  padding: 0.45rem 0.9rem;
-  font-size: 0.85rem;
-}
-
-
-.levels button {
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--line);
-}
-
-.levels button[aria-current="true"] {
-  color: #fff;
-  background: var(--ink);
-  border-color: var(--ink);
-}
-
-.levels button:hover {
-  color: var(--ink);
-  border-color: var(--query);
-  background: transparent;
 }
 
 :focus-visible {
@@ -161,35 +81,6 @@ button:disabled {
   font-size: 0.85rem;
   color: var(--muted);
   margin: 0.5rem 0 0;
-}
-
-/* Says where the data came from. An explainer about trust cannot overclaim. */
-.source {
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin: 0.5rem 0 0;
-  padding-left: 0.6rem;
-  border-left: 3px solid var(--line);
-}
-
-.source[data-state="live"] {
-  border-left-color: var(--answer);
-}
-
-.source[data-state="fallback"] {
-  border-left-color: var(--referral);
-}
-
-/* What the selected record type actually is, said before the walk runs. */
-.type-note {
-  max-width: 44rem;
-  margin: 1rem 0 0;
-  padding: 0.6rem 0.8rem;
-  font-size: 0.88rem;
-  color: var(--muted);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
 }
 
 /* Graph */
@@ -230,8 +121,8 @@ button:disabled {
   fill: var(--muted);
 }
 
-/* A level adds to the graph rather than replacing it, so what it added
-   should be visibly added. Falls back to an instant jump where the SVG
+/* Growth adds to the graph rather than redrawing it, so what the visitor
+   added arrives visibly. Falls back to an instant jump where the SVG
    transform property is not animatable. */
 .node {
   opacity: 1;
@@ -647,35 +538,6 @@ tr[data-role="empty"] .record-role {
   font-weight: 600;
 }
 
-/* Efficiency as a number rather than an adjective. */
-.tally {
-  margin: 0.2rem 0 0;
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
-  color: var(--cached);
-}
-
-/* The resolver's memory. It lives inside the resolver's own panel rather
-   than in a section of its own — a cache belongs to a machine. */
-
-.cache-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
-}
-
-.clock {
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.cache-head .clock {
-  flex: 1 1 auto;
-}
-
 .cache-empty {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
@@ -738,86 +600,11 @@ tr[data-role="discarded"] .record-role {
   text-decoration: line-through;
 }
 
-.threats {
-  margin: 1.5rem 0 0;
-  padding: 0.75rem 1rem 1rem;
-  background: var(--panel);
-  border: 1px solid var(--forged);
-  border-radius: 12px;
-}
-
-.threat-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.threat-head h2 {
-  margin: 0;
-  flex: 1 1 auto;
-  font-size: 1.05rem;
-  color: var(--forged);
-}
-
-/* The arithmetic, kept on screen so the scaled ID space never passes as real. */
-.odds {
-  margin-top: 0.6rem;
-  font-family: ui-monospace, monospace;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.odds p {
-  margin: 0 0 0.15rem;
-}
-
-.odds p[data-state="won"] {
-  color: var(--forged);
-  font-weight: 700;
-}
-
-.defences {
-  margin: 0.8rem 0 0;
-  padding: 0.5rem 0.8rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.defences legend {
-  padding: 0 0.35rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.defences label {
-  display: block;
-  font-size: 0.88rem;
-  margin-top: 0.3rem;
-}
-
-.defences label span {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.notes {
-  margin-top: 2.5rem;
-  max-width: 44rem;
-}
-
 code {
   font-size: 0.9em;
   background: #eef2f6;
   padding: 0.1em 0.35em;
   border-radius: 4px;
-}
-
-/* The type badge reads as the label of the sentence that follows it. */
-.type-note code {
-  margin-right: 0.35rem;
-  font-weight: 700;
-  color: var(--ink);
 }
 
 @media (prefers-color-scheme: dark) {
