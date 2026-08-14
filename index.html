@@ -3,88 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Who do you trust? — how a name becomes an address</title>
+    <title>Who do you trust? — DNS at the scale it actually runs at</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header>
-      <nav aria-label="Levels" data-levels class="levels"></nav>
+      <nav aria-label="Sections" class="jump">
+        <a href="#world">The network</a>
+        <a href="#readout">What it costs</a>
+        <a href="#log">What just happened</a>
+      </nav>
     </header>
 
     <main>
       <h1>Who do you trust?</h1>
 
       <p class="lede">
-        Every site you have ever opened began with your machine asking a
-        stranger <em>where is this?</em> and believing the answer. Watch what
-        actually happens.
+        The name system answers trillions of questions a day on a handful of
+        machines at the top. It survives by <strong>forgetting slowly</strong>,
+        not by being big — and the same memory that saves it is what makes one
+        lie spread. Grow this network and see for yourself.
       </p>
 
-      <form data-lookup class="lookup">
-        <label for="name">Look up a name</label>
-        <div class="lookup-row">
-          <input
-            id="name"
-            data-name
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            aria-describedby="lookup-hint"
-          />
-          <select id="type" data-type aria-label="Record type" hidden></select>
-          <select
-            id="client"
-            data-client
-            aria-label="Who is asking"
-            hidden
-          ></select>
-          <button type="submit">Resolve</button>
-        </div>
-        <p id="lookup-hint" class="hint">
-          Any real domain. A name that does not exist genuinely returns
-          <code>NXDOMAIN</code> — try one and watch where the walk stops. Names
-          are shown fully qualified, with the trailing root dot that DNS really
-          uses and nobody ever types. <strong>Click any machine</strong> to see
-          what it holds.
-        </p>
-        <p data-source class="source"></p>
-      </form>
-
-      <p data-type-note class="type-note" hidden></p>
-
-      <section class="threats" data-threats hidden aria-label="Attacker">
-        <div class="threat-head">
-          <h2>You are the attacker</h2>
-          <select id="threat" data-threat aria-label="Where you are standing">
-            <option value="off">Not attacking</option>
-            <option value="onpath">On-path — I can see the query</option>
-            <option value="offpath">Off-path — I have to guess</option>
-          </select>
-          <button data-forge type="button" disabled>
-            Send a forged reply
-          </button>
-        </div>
-        <div data-odds class="odds"></div>
-        <fieldset class="defences">
-          <legend>What the resolver does about it</legend>
-          <label>
-            <input type="checkbox" data-defence="ports" />
-            Source port randomisation
-            <span>the reply must match a port too, squaring the guess</span>
-          </label>
-          <label>
-            <input type="checkbox" data-defence="dnssec" />
-            DNSSEC validation
-            <span>records are signed, so a forgery fails even when it wins</span>
-          </label>
-        </fieldset>
-      </section>
-
-      <div data-graph class="stage"></div>
-
-      <section aria-label="Resolution log">
-        <h2>What just happened</h2>
-
+      <section id="world" aria-label="The network">
         <div class="transport">
           <button data-testid="interaction" data-next type="button">
             Next message
@@ -100,142 +41,31 @@
               min="0"
               max="6"
               step="1"
-              value="0"
+              value="3"
               aria-describedby="speed-note"
             />
             <span id="speed-note" data-speed-note class="speed-note"></span>
           </label>
         </div>
 
-        <div data-testid="output" class="log"></div>
-      </section>
+        <div data-graph class="stage"></div>
 
-      <section class="notes" data-notes="l1">
-        <h2>The thing to notice</h2>
-        <p>
-          Your machine sent one question and got one answer. Everything else
-          was the <strong>resolver</strong> walking the tree on your behalf,
-          one delegation at a time. Only the last server it reached was
-          <strong>authoritative</strong> for the name. Every other one just
-          said <em>not me, ask them</em>.
-        </p>
-        <p>
-          Notice where the web server sits. Your traffic never passes through
-          a nameserver — they only hand out directions. That is why the line
-          to the site cannot be drawn until the walk finishes: until then, you
-          do not know the address to draw it to.
+        <p class="hint">
+          <strong>Click any machine</strong> to see what it is holding and what
+          it is costing. Everything on this page is one simulation with a
+          seed: a browser cannot watch a real resolver's cache, so this models
+          it rather than pretending to observe it.
         </p>
       </section>
 
-      <section class="notes" data-notes="l2" hidden>
-        <h2>The thing to notice</h2>
-        <p>
-          The walk is the same. What changed is the <strong>question</strong>:
-          it has a type, and the type decides what comes back. Every referral
-          you watched in level 1 was made of <code>NS</code> records and the
-          <strong>glue</strong> addresses that make them usable — read a
-          message, or click the nameserver that sent it, and you are looking
-          at the exact data the tree runs on.
-        </p>
-        <p>
-          Three answers behave differently. A <code>CNAME</code> is not an
-          address at all, it is another name, so the resolver throws away its
-          progress and <strong>starts again at the root</strong>. An
-          <code>MX</code> names a mail server rather than a web server, which
-          is why a second destination appeared below your machine — and its
-          answer is a name too, so it needs a lookup of its own. Ask for
-          <code>NS</code> or <code>SOA</code> and nothing lights up at the
-          bottom: knowing who runs a zone does not give you anywhere to
-          connect.
-        </p>
-        <p>
-          The <code>SOA</code> is the one you get when a name does not exist.
-          Its last number is how long every resolver is told to remember the
-          absence — a typo is cached exactly like a success.
-        </p>
+      <section id="readout" aria-label="What it costs">
+        <h2>What it costs</h2>
+        <p data-testid="output" data-headline class="headline"></p>
       </section>
-      <section class="notes" data-notes="l3" hidden>
-        <h2>The thing to notice</h2>
-        <p>
-          Ask for <code>anu.edu.au</code>, then ask again. The second time
-          nothing leaves the resolver at all. Now ask for
-          <code>terra-web.anu.edu.au</code> — a name it has never seen — and watch
-          where the walk <strong>starts</strong>. The root is not asked. The
-          TLD is not asked. The resolver already knew who serves
-          <code>anu.edu.au</code>, because it cached the
-          <strong>referral</strong>, not just the answer.
-        </p>
-        <p>
-          That is the whole reason the thirteen root servers can carry the
-          internet. Then try <code>unsw.edu.au</code>: a different zone
-          under the same TLD, so the root is still skipped but the TLD has to
-          be asked. The saving is partial, and it is proportional to what was
-          already known.
-        </p>
-        <p>
-          Switch to the other machine and ask the same name. It gets the
-          cached answer too — it never spoke to a nameserver in its life. A
-          resolver is shared infrastructure, and so is its memory. Hold onto
-          that: in level 4 it becomes the reason one forged record is worth
-          forging.
-        </p>
-        <p>
-          Nothing here <em>propagates</em>. Open the
-          <strong>resolver</strong> and press <strong>wait</strong>, then watch
-          entries drop out of its memory as their TTLs run down. A change
-          you make to a zone is not pushed anywhere — the world simply stops
-          remembering the old answer, at a speed you chose in advance when you
-          set the TTL.
-        </p>
-      </section>
-      <section class="notes" data-notes="l4" hidden>
-        <h2>The thing to notice</h2>
-        <p>
-          Every message so far has been believed on the strength of one thing:
-          a 16-bit number the resolver picked and the reply quoted back. There
-          is no signature, no password and no return address that cannot be
-          written by anyone. Pick <strong>on-path</strong> and resolve a name:
-          you can read that number off the wire, so you never guess, and you
-          win every time. The cost of this attack is not cleverness, it is
-          standing on the link — open wifi, a router, an ISP.
-        </p>
-        <p>
-          Now pick <strong>off-path</strong>, where you cannot see the query
-          and have to guess. Ask for <code>anu.edu.au</code> and you will
-          almost certainly lose — and then you have lost for good, because the
-          real answer is now cached and the next question never leaves the
-          resolver. One shot per name, then wait out the TTL.
-        </p>
-        <p>
-          So do not attack the name. Press
-          <strong>send a forged reply</strong>: it asks for a random
-          subdomain that nobody has ever looked up and nobody has cached, so
-          you get another attempt, and another. And do not forge the address —
-          forge the <strong>delegation</strong>. Win once and the resolver
-          believes you are the nameserver for the entire zone. This is
-          Kaminsky's attack, and the reason it works is level 3's reason: a
-          cache does not record where a record came from.
-        </p>
-        <p>
-          Then switch to the other machine and ask for
-          <code>anu.edu.au</code>. It has never been attacked, never spoken to
-          you, and it goes where you tell it — from a cache it never filled.
-          The efficiency argument of level 3, running in reverse: everything
-          that made one answer serve thousands of people makes one lie do the
-          same.
-        </p>
-        <p>
-          The defences are not decoration. <strong>Port randomisation</strong>
-          makes the reply match a port as well as an ID, squaring the search
-          space rather than doubling it — try the attack again and watch the
-          odds. <strong>DNSSEC</strong> is different in kind: the forgery still
-          arrives, still quotes the right ID, and is thrown out anyway, because
-          the records are signed and yours are not. And
-          <strong>DNS-over-HTTPS</strong>, which is what most people mean when
-          they say their DNS is encrypted, protects only the hop between your
-          machine and the resolver. Every hop in this diagram past the resolver
-          is exactly as it was.
-        </p>
+
+      <section id="log" aria-label="Resolution log">
+        <h2>What just happened</h2>
+        <div data-log class="log"></div>
       </section>
     </main>
 
