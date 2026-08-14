@@ -1,4 +1,4 @@
-import { NO_DEFENCES } from "../dns/attack.js";
+import { NO_DEFENCES, type Threat } from "../dns/attack.js";
 import { entries } from "../dns/cache.js";
 import { SPEEDS } from "../graph/animate.js";
 import {
@@ -10,6 +10,7 @@ import {
   type Scene,
 } from "../graph/layout.js";
 import { createGraph } from "../graph/render.js";
+import type { RecordType } from "../dns/types.js";
 import {
   createSim,
   drainPackets,
@@ -18,7 +19,8 @@ import {
   type SimState,
 } from "../sim/engine.js";
 import { LIMITS, type SimConfig } from "../sim/types.js";
-import { cacheTable, zoneRecords } from "./records.js";
+import { stepper, switches } from "./controls.js";
+import { cacheTable, humanTtl, zoneRecords } from "./records.js";
 import { band, headline, intensity, nodeMetric } from "./readouts.js";
 
 // The page opens on the smallest network that is still DNS: one of everything.
@@ -62,6 +64,35 @@ const HOLDS_NOTHING: Record<string, string> = {
     "A resolver has authority over nothing. Everything below is borrowed, with a clock on it, and every entry here is a question the servers above never had to answer.",
 };
 
+// Rungs, not ranges. TTL spans a second to a day, and a linear control over
+// that spends almost all its travel between values nobody would choose.
+const TTLS = [1, 5, 30, 60, 300, 1800, 3600, 21600, 86400];
+const RATES = [0.2, 0.5, 1, 2, 5, 10, 20];
+// Infinity is the honest top rung: most of this hierarchy has no ceiling worth
+// modelling, and "no limit" is a state the visitor has to be able to return to.
+const CAPACITIES = [1, 5, 20, 100, 500, Infinity];
+
+const TYPES: { id: RecordType; label: string; note?: string }[] = [
+  { id: "A", label: "A — an address" },
+  { id: "AAAA", label: "AAAA — an IPv6 address" },
+  { id: "MX", label: "MX — where mail goes" },
+  { id: "NS", label: "NS — who is in charge", note: "No site here answers this: watch the empty answers climb." },
+];
+
+const THREATS: { id: Threat; label: string; note: string }[] = [
+  { id: "off", label: "Nobody", note: "Every answer comes from the machine that owns the name." },
+  {
+    id: "onpath",
+    label: "On the path",
+    note: "Sees the question, so it never has to guess the number attached to it.",
+  },
+  {
+    id: "offpath",
+    label: "Off the path",
+    note: "Cannot see the question, so it races the real answer and guesses.",
+  },
+];
+
 export function start(): void {
   const stage = document.querySelector<HTMLElement>("[data-graph]");
   const readout = document.querySelector<HTMLElement>("[data-headline]");
@@ -83,24 +114,135 @@ export function start(): void {
   const inspect = (id: string): void => {
     const body = document.createElement("div");
     body.className = "inspector-body";
+    const { config } = state;
 
     const cache = state.caches.get(id);
     if (cache !== undefined) {
-      body.append(cacheTable(entries(cache, state.now), state.now));
+      body.append(
+        line(HOLDS_NOTHING.resolver ?? ""),
+        cacheTable(entries(cache, state.now), state.now),
+      );
+      // Both defences are things a resolver does, so this is where they live.
+      body.append(
+        switches({
+          legend: "This resolver's defences",
+          kind: "checkbox",
+          items: [
+            {
+              id: "ports",
+              label: "Randomise the source port",
+              note: "A forgery now has to match a port as well as an ID.",
+              on: config.defences.ports,
+            },
+            {
+              id: "dnssec",
+              label: "Check signatures (DNSSEC)",
+              note: "The forgery still arrives; it is thrown out on its own terms.",
+              on: config.defences.dnssec,
+            },
+          ],
+          onToggle: (key, on) => {
+            apply({ defences: { ...config.defences, [key]: on } });
+          },
+        }),
+      );
     }
 
-    for (const zone of state.topology.zones.filter((z) => z.server === id)) {
+    if (state.topology.resolverOf.has(id)) {
+      body.append(line(HOLDS_NOTHING.user ?? ""));
+      body.append(
+        stepper({
+          legend: "Queries per second, each",
+          values: RATES,
+          at: config.ratePerUser,
+          format: (v) => `${String(v)} q/s`,
+          onPick: (v) => {
+            apply({ ratePerUser: v });
+          },
+        }),
+        switches({
+          legend: "What every machine asks for",
+          kind: "checkbox",
+          items: TYPES.map((t) => ({ ...t, on: config.mix.includes(t.id) })),
+          onToggle: (key, on) => {
+            const next = on
+              ? [...config.mix, key as RecordType]
+              : config.mix.filter((t) => t !== key);
+            // A silent world is not a configuration, so the last one stays on.
+            if (next.length > 0) apply({ mix: next });
+          },
+        }),
+        switches({
+          legend: "Who else is answering",
+          kind: "radio",
+          items: THREATS.map((t) => ({ ...t, on: config.attacker === t.id })),
+          onToggle: (key) => {
+            apply({ attacker: key as Threat });
+          },
+        }),
+      );
+    }
+
+    const served = state.topology.zones.filter((z) => z.server === id);
+    for (const zone of served) {
       const heading = document.createElement("h4");
       heading.textContent =
         zone.origin === "."
           ? "Authoritative for the root zone"
           : `Authoritative for ${zone.origin}`;
-      body.append(heading, zoneRecords(zone.records));
+      // Above the table rather than inside its TTL column: the value is one
+      // knob for the whole world, and eight editable cells would imply eight.
+      body.append(
+        heading,
+        stepper({
+          legend: "TTL on every record here",
+          note: "How long a resolver may keep an answer before asking again.",
+          values: TTLS,
+          at: config.ttl,
+          format: humanTtl,
+          onPick: (v) => {
+            apply({ ttl: v });
+          },
+        }),
+        zoneRecords(zone.records),
+      );
     }
 
-    if (body.childElementCount === 0) {
-      const kind = id.startsWith("u") ? "user" : "resolver";
-      body.append(line(HOLDS_NOTHING[kind] ?? "Holds no zone data."));
+    if (served.length > 0) {
+      const ceiling = config.capacity[id] ?? Infinity;
+      body.append(
+        stepper({
+          legend: "What this machine can answer",
+          note: "Past its ceiling queries queue, then time out.",
+          values: CAPACITIES,
+          at: ceiling,
+          format: (v) => (v === Infinity ? "no limit" : `${String(v)} q/s`),
+          onPick: (v) => {
+            const next = { ...config.capacity };
+            if (v === Infinity) delete next[id];
+            else next[id] = v;
+            apply({ capacity: next });
+          },
+        }),
+        switches({
+          legend: "Is it up?",
+          kind: "checkbox",
+          items: [
+            {
+              id: "offline",
+              label: "Take this machine offline",
+              note: "Under a long TTL, watch how little happens at first.",
+              on: config.offline.includes(id),
+            },
+          ],
+          onToggle: (_key, on) => {
+            const next = on
+              ? [...config.offline, id]
+              : config.offline.filter((s) => s !== id);
+            apply({ offline: next });
+          },
+        }),
+      );
     }
 
     graph.openInspector(id, state.topology.nodes[id]?.title ?? id, body);
@@ -109,10 +251,22 @@ export function start(): void {
   // The world is rebuilt around what changed; the counters keep their history,
   // because what already happened did happen.
   const apply = (patch: Partial<SimConfig>): void => {
+    // A knob rebuilds the panel it lives in, so the key that was just pressed
+    // has to be found again afterwards or the keyboard is thrown out mid-turn.
+    const active = document.activeElement;
+    const held =
+      active instanceof HTMLElement ? active.getAttribute("aria-label") : null;
+
     reconfigure(state, { ...state.config, ...patch });
     graph.setScene(scene);
     const open = graph.inspecting();
     if (open !== undefined) inspect(open);
+    if (held !== null) {
+      const again = stage.querySelector<HTMLElement>(
+        `[aria-label="${CSS.escape(held)}"]`,
+      );
+      again?.focus();
+    }
     paint();
   };
 

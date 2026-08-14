@@ -956,6 +956,72 @@ code {
   cursor: pointer;
 }
 
+/* Knobs, inside the inspector of the thing they change. Borderless and
+   flush-left so a control reads as part of the machine, not as a form. */
+.knob {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.knob legend {
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.knob-note {
+  margin: 0.1rem 0 0.3rem;
+  font-size: 0.75rem;
+}
+
+.knob-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.knob-step {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.knob-step:disabled {
+  color: var(--line);
+  cursor: default;
+}
+
+.knob-value {
+  min-width: 5.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--query);
+}
+
+.knob-switch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.4rem;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.knob-switch small {
+  grid-column: 2;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 /* No room to sit beside a machine at phone width, so it stops trying. */
 @media (width <= 700px) {
   .inspector {

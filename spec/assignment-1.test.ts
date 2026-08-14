@@ -76,3 +76,27 @@ describe("assignment 1: the visitor drives the resolution", () => {
     ).toBeNull();
   });
 });
+
+// The pivot's own contract: growth is the interaction, so the controls it
+// replaced have to stay gone. A level nav or a threat panel reappearing would
+// mean the page had drifted back to narrating a fixed sequence.
+describe("assignment 1: manipulation, not narration", () => {
+  const page = (): Document =>
+    new JSDOM(readFileSync(distPath, "utf8")).window.document;
+
+  it("offers no level selector", () => {
+    expect(
+      page().querySelector("[data-levels]"),
+      "Choosing a level is moving through a story about the system. The " +
+        "visitor grows the network instead.",
+    ).toBeNull();
+  });
+
+  it("offers no standalone threat panel", () => {
+    expect(
+      page().querySelector("[data-threat]"),
+      "The attacker is a property of a machine and is armed from its own " +
+        "inspector, not from a section beside the picture.",
+    ).toBeNull();
+  });
+});
