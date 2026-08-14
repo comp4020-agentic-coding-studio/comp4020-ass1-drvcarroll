@@ -312,7 +312,9 @@ export function createGraph(
       // rather than fixed when the node was created.
       const shape = nodeShapes.get(id);
       const width = scene.widths[id] ?? 148;
-      if (shape instanceof SVGCircleElement) {
+      // By tag rather than by instanceof: the SVG interfaces are not defined
+      // in every DOM the tests boot this in, and the tag is the same claim.
+      if (shape?.tagName === "circle") {
         shape.setAttribute("r", String(width / 2));
       } else if (shape !== undefined) {
         shape.setAttribute("x", String(-width / 2));
