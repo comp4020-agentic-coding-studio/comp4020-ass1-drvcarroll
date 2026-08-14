@@ -2,7 +2,13 @@ import { ATTACKER, forge, space, type Forgery } from "../dns/attack.js";
 import type { Cache } from "../dns/cache.js";
 import { isWithin } from "../dns/names.js";
 import { resolve } from "../dns/resolve.js";
-import type { NodeId, Question, ResolutionStep, Zone } from "../dns/types.js";
+import type {
+  NodeId,
+  Question,
+  ResolutionResult,
+  ResolutionStep,
+  Zone,
+} from "../dns/types.js";
 import {
   createSamples,
   decay,
@@ -172,6 +178,7 @@ function attackerZone(origin: string, state: SimState): Zone {
 // wins every name in the zone until the TTL runs out.
 function interceptFor(
   state: SimState,
+  rng: Rng,
 ): ((q: Question, zone: Zone, txid: number) => Forgery | undefined) | undefined {
   const target = attackTarget(state);
   if (target === undefined) return undefined;
@@ -186,7 +193,7 @@ function interceptFor(
         zone: target,
         ns: ATTACKER_NS,
         address: ATTACKER_ADDRESS,
-        guess: () => intBelow(state.chance, space(defences)),
+        guess: () => intBelow(rng, space(defences)),
       },
       q,
       txid,
@@ -245,7 +252,7 @@ export function runQuery(state: SimState, user: NodeId): void {
     client: user,
     recursor: resolver,
     txid: () => intBelow(state.chance, space(defences)),
-    intercept: interceptFor(state),
+    intercept: interceptFor(state, state.chance),
   });
 
   state.totals.queries += 1;
@@ -317,6 +324,36 @@ export function runQuery(state: SimState, user: NodeId): void {
   if (first !== undefined && state.packets.length < PACKET_LIMIT) {
     state.packets.push({ from: first.from, to: first.to, kind: first.kind });
   }
+}
+
+// One query a visitor can watch, resolved as if it had happened. Against a
+// copy of the cache and its own draws, so following a query neither writes to
+// the resolver's memory nor moves the world's arrival sequence: the counters
+// stay honest and the run stays reproducible.
+export function previewQuery(
+  state: SimState,
+  user: NodeId,
+): ResolutionResult | undefined {
+  const resolver = state.topology.resolverOf.get(user);
+  const held = resolver === undefined ? undefined : state.caches.get(resolver);
+  if (resolver === undefined || held === undefined) return undefined;
+
+  // Seeded from where the run has got to, so a second look at a busy world
+  // asks a different question rather than the same one forever.
+  const rng = mulberry32(state.config.seed + state.totals.queries);
+  const name = pick(rng, state.topology.names);
+  const type = pick(rng, state.config.mix);
+  if (name === undefined || type === undefined) return undefined;
+
+  const { defences } = state.config;
+  return resolve({ name, type }, visibleZones(state), {
+    cache: new Map(held),
+    now: state.now,
+    client: user,
+    recursor: resolver,
+    txid: () => intBelow(rng, space(defences)),
+    intercept: interceptFor(state, rng),
+  });
 }
 
 function insert(pending: Arrival[], arrival: Arrival): void {

@@ -4,6 +4,7 @@ import {
   createSim,
   hitRate,
   percentile,
+  previewQuery,
   reconfigure,
   stepTo,
   type SimState,
@@ -229,5 +230,38 @@ describe("growing the world mid-run", () => {
     const state = sim({ users: 60, ratePerUser: 20 });
     expect(state.config.users).toBe(60);
     expect(state.config.ratePerUser).toBeLessThan(20);
+  });
+});
+
+// Following a query must not be a way of asking one. The transcript is drawn
+// from a copy of the cache and its own draws, so watching costs the world
+// nothing — otherwise every drill-down would quietly inflate the readouts.
+describe("watching one query", () => {
+  it("leaves the counters and the cache exactly as they were", () => {
+    const state = sim();
+    stepTo(state, 60);
+    const cache = state.caches.get(resolverId(0));
+    const before = { ...state.totals };
+    const held = new Map(cache);
+
+    const result = previewQuery(state, userId(0));
+    expect(result?.steps.length).toBeGreaterThan(0);
+    expect(state.totals).toEqual(before);
+    expect([...(cache ?? [])]).toEqual([...held]);
+  });
+
+  it("does not move the arrival sequence the world is running on", () => {
+    const a = sim();
+    const b = sim();
+    stepTo(a, 60);
+    stepTo(b, 60);
+    previewQuery(b, userId(0));
+    stepTo(a, 120);
+    stepTo(b, 120);
+    expect(b.totals).toEqual(a.totals);
+  });
+
+  it("has nothing to follow for a machine that is not on the network", () => {
+    expect(previewQuery(sim(), "root")).toBeUndefined();
   });
 });

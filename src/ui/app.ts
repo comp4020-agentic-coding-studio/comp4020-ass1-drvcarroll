@@ -21,6 +21,7 @@ import {
 import { LIMITS, type SimConfig } from "../sim/types.js";
 import { stepper, switches } from "./controls.js";
 import { cacheTable, humanTtl, zoneRecords } from "./records.js";
+import { spotlight, type Spotlight } from "./spotlight.js";
 import { band, headline, intensity, nodeMetric } from "./readouts.js";
 
 // The page opens on the smallest network that is still DNS: one of everything.
@@ -102,8 +103,31 @@ export function start(): void {
   const speedNote = document.querySelector<HTMLElement>("[data-speed-note]");
   if (!stage || !readout || !advance || !rewind || !speed || !speedNote) return;
 
+  const log = document.querySelector<HTMLElement>("[data-log]");
+  if (!log) return;
+
   const state: SimState = createSim(OPENING);
   let rate = SPEEDS[Number(speed.value)] ?? 1;
+
+  // Following one query. The swarm keeps running behind it — only this one
+  // message is being walked, and the world does not wait to be watched.
+  let live: Spotlight | undefined;
+
+  // Two jobs for two buttons, and which job depends on whether a query is
+  // being followed. Stated in one place so the pair cannot drift apart.
+  const transport = (): void => {
+    if (live === undefined) {
+      advance.disabled = rate !== 0;
+      advance.title = rate === 0 ? "" : "Pause to step the world by hand";
+      rewind.disabled = true;
+      rewind.title = "Follow one machine's query to step back through it";
+      return;
+    }
+    advance.disabled = live.at() >= live.total() - 1;
+    advance.title = "";
+    rewind.disabled = live.at() <= 0;
+    rewind.title = "";
+  };
 
   const scene = (name: LayoutName): Scene => layout(state.topology, name);
   const graph = createGraph(stage, scene);
@@ -257,6 +281,9 @@ export function start(): void {
     const held =
       active instanceof HTMLElement ? active.getAttribute("aria-label") : null;
 
+    // A walk through the old world says nothing about the new one, and the
+    // scene is about to be rebuilt underneath it.
+    drop();
     reconfigure(state, { ...state.config, ...patch });
     graph.setScene(scene);
     const open = graph.inspecting();
@@ -280,11 +307,34 @@ export function start(): void {
     if (next !== at) apply({ [field]: next });
   };
 
+  const drop = (): void => {
+    live?.close();
+    live = undefined;
+    transport();
+  };
+
+  const follow = (user: string): void => {
+    drop();
+    live = spotlight(graph, state, user, log, rate, {
+      onSeek: transport,
+      onDone: transport,
+    });
+    transport();
+  };
+
   graph.onNodeSelect((id) => {
-    if (id === undefined) return;
+    if (id === undefined) {
+      drop();
+      return;
+    }
     if (id.startsWith(GROW)) step(id.slice(GROW.length) as Growable, 1);
     else if (id.startsWith(SHRINK)) step(id.slice(SHRINK.length) as Growable, -1);
-    else inspect(id);
+    else {
+      inspect(id);
+      // A machine that asks questions has one to follow; a server is asked.
+      if (state.topology.resolverOf.has(id)) follow(id);
+      else drop();
+    }
   });
 
   const paint = (): void => {
@@ -320,23 +370,30 @@ export function start(): void {
   requestAnimationFrame(frame);
 
   // Paused, the transport is the clock: one quarter-second of world per press,
-  // which is one window of the rates the readouts are made of.
+  // which is one window of the rates the readouts are made of. Following a
+  // query it is that query's transport instead — the same verb, one message at
+  // a time, which is what the spec asks the primary control to do.
   advance.addEventListener("click", () => {
+    if (live !== undefined) {
+      live.next();
+      return;
+    }
     stepTo(state, state.now + 0.25);
     paint();
   });
 
-  // Nothing to seek back through until a single query is being followed.
-  rewind.disabled = true;
-  rewind.title = "Follow one query to step back through it";
+  rewind.addEventListener("click", () => {
+    live?.back();
+  });
 
   speed.addEventListener("input", () => {
     rate = SPEEDS[Number(speed.value)] ?? 0;
     speedNote.textContent = speedName(rate);
-    advance.disabled = rate !== 0;
+    live?.setSpeed(rate);
+    transport();
   });
 
   speedNote.textContent = speedName(rate);
-  advance.disabled = rate !== 0;
+  transport();
   paint();
 }
