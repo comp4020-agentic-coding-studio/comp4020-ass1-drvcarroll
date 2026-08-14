@@ -6,13 +6,12 @@ import { createGraph } from "../graph/render.js";
 import {
   createSim,
   drainPackets,
-  hitRate,
-  percentile,
   stepTo,
   type SimState,
 } from "../sim/engine.js";
 import type { SimConfig } from "../sim/types.js";
 import { cacheTable, zoneRecords } from "./records.js";
+import { band, headline, intensity, nodeMetric } from "./readouts.js";
 
 // The page opens on the smallest network that is still DNS: one of everything.
 // Growth is the interaction, so it cannot be the starting state.
@@ -41,14 +40,6 @@ const PAINT_MS = 100;
 const speedName = (rate: number): string =>
   rate === 0 ? "Paused" : `${String(rate)}× time`;
 
-// The bands the edge shading uses. Absolute query rates rather than a share of
-// the maximum, so growing the network does not quietly rescale the colours.
-const HOT = 4;
-const OVER = 12;
-
-const band = (rate: number): string =>
-  rate > OVER ? "over" : rate > HOT ? "hot" : "ok";
-
 function line(text: string): HTMLParagraphElement {
   const p = document.createElement("p");
   p.textContent = text;
@@ -65,12 +56,12 @@ const HOLDS_NOTHING: Record<string, string> = {
 
 export function start(): void {
   const stage = document.querySelector<HTMLElement>("[data-graph]");
-  const headline = document.querySelector<HTMLElement>("[data-headline]");
+  const readout = document.querySelector<HTMLElement>("[data-headline]");
   const advance = document.querySelector<HTMLButtonElement>("[data-next]");
   const rewind = document.querySelector<HTMLButtonElement>("[data-back]");
   const speed = document.querySelector<HTMLInputElement>("[data-speed]");
   const speedNote = document.querySelector<HTMLElement>("[data-speed-note]");
-  if (!stage || !headline || !advance || !rewind || !speed || !speedNote) return;
+  if (!stage || !readout || !advance || !rewind || !speed || !speedNote) return;
 
   const state: SimState = createSim(OPENING);
   let rate = SPEEDS[Number(speed.value)] ?? 1;
@@ -111,26 +102,21 @@ export function start(): void {
     if (id !== undefined) inspect(id);
   });
 
-  const showHeadline = (): void => {
-    const { queries, lied } = state.totals;
-    const memory = Math.round(hitRate(state) * 100);
-    headline.textContent =
-      `${queries.toLocaleString()} queries · ` +
-      `${String(memory)}% answered from memory · ` +
-      `p95 ${String(Math.round(percentile(state, 0.95)))} ms · ` +
-      `${lied.toLocaleString()} served a lie`;
-  };
-
   const paint = (): void => {
     for (const [key, stat] of state.edges) {
       const [from, to] = key.split(":");
       if (from === undefined || to === undefined) continue;
-      graph.setEdgeLoad(from, to, Math.min(1, stat.rate / OVER), band(stat.rate));
+      graph.setEdgeLoad(from, to, intensity(stat.rate), band(stat.rate));
+    }
+    // The load on a machine, written on the machine. Users are dots and carry
+    // no text, so this reaches exactly the tiers whose rate is the argument.
+    for (const id of Object.keys(state.topology.nodes)) {
+      graph.setNodeMetric(id, nodeMetric(state, id));
     }
     for (const packet of drainPackets(state)) {
       graph.sendPacket(packet.from, packet.to, packet.kind);
     }
-    showHeadline();
+    readout.textContent = headline(state);
   };
 
   let last = performance.now();
