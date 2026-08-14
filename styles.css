@@ -265,6 +265,52 @@ button:disabled {
   fill: var(--muted);
 }
 
+/* A crowd reads as a crowd: no label, only presence. */
+.node-dot {
+  fill: var(--panel);
+  stroke: var(--line);
+  stroke-width: 2;
+  transition: fill 0.2s;
+}
+
+/* The machine's own number, on the machine. */
+.node-metric {
+  text-anchor: middle;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  fill: var(--query);
+}
+
+/* Load as shading: 120 style writes a tick beats a packet per query. */
+.edge[data-load] {
+  opacity: calc(0.35 + 0.65 * var(--load, 0));
+  stroke-width: calc(1 + 2 * var(--load, 0));
+}
+
+.edge[data-load="hot"] {
+  stroke: var(--query);
+}
+
+.edge[data-load="over"] {
+  stroke: var(--deny);
+}
+
+.packet-swarm {
+  fill: var(--query);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.packet-swarm[data-idle="true"] {
+  opacity: 0;
+}
+
+.packet-swarm[data-flying="true"] {
+  transition:
+    cx 0.6s linear,
+    cy 0.6s linear;
+}
+
 .node[data-state="active"] .node-box {
   stroke: var(--query);
 }
@@ -900,4 +946,11 @@ code {
   .node {
     transition: none;
   }
+}
+
+/* Following one query: the swarm keeps running, quietly. */
+svg[data-spotlight="true"] .node:not([data-state]),
+svg[data-spotlight="true"] .edge:not([data-load="over"]),
+svg[data-spotlight="true"] .packet-swarm {
+  opacity: 0.28;
 }
