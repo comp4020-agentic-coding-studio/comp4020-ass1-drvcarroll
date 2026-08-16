@@ -106,7 +106,7 @@ export function createGraph(
   function notePlacement(box: Box): string {
     const [x0 = 0, , w = 1000] = scene.viewBox.split(/\s+/).map(Number);
     const x = Math.min(Math.max(box.x + 4, x0 + 60), x0 + w - 60);
-    return `translate(${String(x)} ${String(Math.max(box.y - 8, 12))})`;
+    return `translate(${String(x)} ${String(Math.max(box.y - 26, 14))})`;
   }
 
   // The inspector is HTML over the SVG rather than a foreignObject: it holds
@@ -136,10 +136,27 @@ export function createGraph(
     const { x, y } = centre(box);
     const left = rect.left - base.left + (rect.width - vw * scale) / 2;
     const top = rect.top - base.top + (rect.height - vh * scale) / 2;
-    inspector.style.setProperty(
-      "--anchor-x",
-      `${String(left + (x - vx) * scale)}px`,
-    );
+    const px = (u: number): number => left + (u - vx) * scale;
+
+    // Beside the object, never on top of it: a panel that covers the thing it
+    // describes breaks the one link the visitor is being asked to make. It
+    // flips to whichever side has room, and only centres if neither does.
+    const gap = 12;
+    const width = inspector.offsetWidth;
+    const room = base.width;
+    const right = px(box.x + box.w) + gap;
+    const start = px(box.x) - gap;
+    let side = "over";
+    let anchorX = px(x);
+    if (right + width <= room) {
+      side = "right";
+      anchorX = right;
+    } else if (start - width >= 0) {
+      side = "left";
+      anchorX = start;
+    }
+    inspector.dataset["side"] = side;
+    inspector.style.setProperty("--anchor-x", `${String(anchorX)}px`);
     inspector.style.setProperty(
       "--anchor-y",
       `${String(top + (y - vy) * scale)}px`,
@@ -264,8 +281,15 @@ export function createGraph(
       add("file-glyph", box.x + box.w - 14, c.y + 5, node.glyph ?? "");
       return out;
     }
-    if (node.kind === "blob" || node.kind === "commit") {
+    if (node.kind === "blob") {
       add("oid", c.x, c.y + 4, node.glyph ?? "");
+      return out;
+    }
+    // A commit's swatch is inside the circle and its hex sits under it: the
+    // colour carries same-or-different, the text is the supporting detail, and
+    // seven characters were never going to fit in 44px.
+    if (node.kind === "commit") {
+      add("oid", c.x, box.y + box.h + 13, node.glyph ?? "");
       return out;
     }
     add("chip-name", c.x, c.y + 5, node.title);

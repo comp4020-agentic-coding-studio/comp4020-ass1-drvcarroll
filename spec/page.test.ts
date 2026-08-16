@@ -138,6 +138,97 @@ describe("opening a thing explains what it is", () => {
   });
 });
 
+// The whole first lesson, driven the way a marker drives it: tab, enter, type.
+// No synthesised drag anywhere, so a green run here is proof on its own that
+// the keyboard path is complete.
+describe("edit, stage, commit, by keyboard and typing alone", () => {
+  const verbs = (): HTMLButtonElement[] => [
+    ...document.querySelectorAll<HTMLButtonElement>(".inspector .verb"),
+  ];
+
+  const press_ = (label: string): void => {
+    const button = verbs().find((b) => b.textContent?.includes(label));
+    expect(button, `no "${label}" verb in the inspector`).toBeTruthy();
+    button?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  };
+
+  const type = (text: string): void => {
+    const box = document.querySelector<HTMLTextAreaElement>(
+      ".inspector .content",
+    );
+    expect(box).toBeTruthy();
+    if (box === null) return;
+    box.value = text;
+    box.dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
+
+  beforeEach(() => {
+    boot();
+    for (const id of ["laptop", "files", "index", "git"]) press(id);
+  });
+
+  it("shows a file's contents in its inspector, not on the canvas", () => {
+    press("file:README.md");
+    expect(
+      document.querySelector<HTMLTextAreaElement>(".inspector .content")?.value,
+    ).toContain("my project");
+    expect(document.querySelector("svg")?.textContent).not.toContain(
+      "A thing I am making",
+    );
+  });
+
+  it("marks the file the moment it is changed", () => {
+    press("file:README.md");
+    type("# my project\n\nchanged.\n");
+    expect(node("file:README.md")?.getAttribute("data-glyph")).toBe("A");
+  });
+
+  it("stages the change, and a blob appears in the index", () => {
+    press("file:README.md");
+    type("changed");
+    press_("Stage this change");
+    expect(document.querySelector('[data-node^="blob:"]')).toBeTruthy();
+    expect(document.querySelector("[data-said]")?.textContent).toContain(
+      "Staged README.md",
+    );
+  });
+
+  it("offers unstage on the blob, and it puts the index back", () => {
+    press("file:README.md");
+    type("changed");
+    press_("Stage this change");
+    const blob = document.querySelector('[data-node^="blob:"]');
+    blob?.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    press_("Unstage this");
+    expect(document.querySelector('[data-node^="blob:"]')).toBeFalsy();
+  });
+
+  it("commits from the index, and a commit appears in .git", () => {
+    press("file:README.md");
+    type("changed");
+    press_("Stage this change");
+    press("index");
+    const message = document.querySelector<HTMLInputElement>(
+      ".inspector .message",
+    );
+    expect(message).toBeTruthy();
+    if (message !== null) message.value = "first commit";
+    press_("Commit these changes");
+    expect(document.querySelector('[data-node^="local:commit:"]')).toBeTruthy();
+    expect(document.querySelector("[data-said]")?.textContent).toContain(
+      "first commit",
+    );
+  });
+
+  it("keeps every verb inside an inspector, never in a toolbar", () => {
+    press("file:README.md");
+    expect(document.querySelectorAll("main > button")).toHaveLength(0);
+    expect(verbs().length).toBeGreaterThan(0);
+  });
+});
+
 describe("the phone gets the same picture, stacked", () => {
   it("draws every entity at 390 too", () => {
     boot(390);

@@ -265,8 +265,14 @@ text {
   opacity: 0;
 }
 
-/* Feedback at the object it happened to, not at the bottom of the page. */
+/* Feedback at the object it happened to, not at the bottom of the page. The
+   halo lets a note land on the object rather than in a clear margin: it stays
+   legible over a chip, a border, or another shape. */
 .note-text {
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
   fill: var(--accent);
   font-size: 12px;
   font-weight: 600;
@@ -330,6 +336,14 @@ text {
   inset-block-start: var(--anchor-y, 50%);
 }
 
+.inspector[data-side="right"] {
+  transform: translate(0, -50%);
+}
+
+.inspector[data-side="left"] {
+  transform: translate(-100%, -50%);
+}
+
 .inspector header {
   display: flex;
   gap: 0.5rem;
@@ -348,6 +362,43 @@ text {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+/* Content lives here, never on the canvas: detail costs nothing until it is
+   asked for, and editing the real text is what makes the M appear. */
+.inspector .content {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 5.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+
+.inspector .message {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+/* One status sentence, so the glyph on the canvas stays the signal. */
+.inspector .state {
+  margin: 0.5rem 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .inspector-close {

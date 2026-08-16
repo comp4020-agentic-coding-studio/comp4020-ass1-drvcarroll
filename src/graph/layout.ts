@@ -412,10 +412,11 @@ function placeCommits(
     links.push({ from: id, to: `${repoOf}:commit:${oid}`, kind: "pin" });
   }
 
+  // Room for the oid line printed under each commit.
   return {
     nodes,
     links,
-    height: m.chip.h + 10 + m.commit,
+    height: m.chip.h + 10 + m.commit + 16,
   };
 }
 

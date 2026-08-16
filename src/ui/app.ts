@@ -1,9 +1,18 @@
 // Wires the model to the picture. Everything the visitor does goes through
-// act(): one world in, one world out, one redraw. There is no other path, so
+// apply(): one world in, one world out, one redraw. There is no other path, so
 // the drawing cannot disagree with the model.
 
 import type { World } from "../git/repo.js";
-import { edit, emptyWorld } from "../git/repo.js";
+import {
+  commitIndex,
+  discard,
+  edit,
+  emptyWorld,
+  headOid,
+  stage,
+  unstage,
+} from "../git/repo.js";
+import { isClean, statusFor } from "../git/status.js";
 import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
 import type { Graph } from "../graph/render.js";
@@ -30,6 +39,14 @@ const WHAT: Record<string, string> = {
     "your files, just their names and content ids.",
 };
 
+const FILE_IS =
+  "A file on your disk. Change it and git notices, but does nothing " +
+  "about it until you say so.";
+
+const BLOB_IS =
+  "The content of a file, named by a hash of that content. It is already " +
+  "inside .git: staging copied it there, so unstaging loses nothing.";
+
 // The project the visitor arrives to. Two files, so "your files" is a place
 // with things in it before anything is asked of them.
 function seed(): World {
@@ -40,8 +57,8 @@ function seed(): World {
 }
 
 export function start(): void {
-  const stage = document.querySelector("[data-graph]");
-  if (stage === null || !(stage instanceof HTMLElement)) return;
+  const stage_ = document.querySelector("[data-graph]");
+  if (stage_ === null || !(stage_ instanceof HTMLElement)) return;
   const promptLine = document.querySelector("[data-prompt]");
   const said = document.querySelector("[data-said]");
 
@@ -50,7 +67,7 @@ export function start(): void {
   // lands before any git word does.
   const open = new Set<string>();
 
-  const graph: Graph = createGraph(stage, (name: Layout) =>
+  const graph: Graph = createGraph(stage_, (name: Layout) =>
     layout(world, open, name),
   );
 
@@ -67,6 +84,23 @@ export function start(): void {
   const suggest = (text: string): void => {
     if (promptLine !== null) promptLine.textContent = text;
   };
+
+  // Changes the world and nothing else, so typing into a file can update the
+  // status glyph without the panel being torn out from under the cursor.
+  function apply(next: World): void {
+    world = next;
+    redraw();
+    nextPrompt();
+  }
+
+  // A verb: change the world, then say what happened beside the thing it
+  // happened to. The live region is the mirror, not the primary channel.
+  function act(next: World, at: string, told: string): void {
+    apply(next);
+    graph.closeInspector();
+    graph.annotate(at, told);
+    say(told);
+  }
 
   // Opening an entity changes no git state, so it never counts as progress. It
   // gates access instead: you cannot edit a file before you open your files.
@@ -85,13 +119,118 @@ export function start(): void {
     nextPrompt();
   }
 
-  function verb(label: string, run: () => void): HTMLButtonElement {
+  function verb(
+    label: string,
+    run: () => void,
+    undo = false,
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "verb";
+    if (undo) button.dataset["undo"] = "";
     button.textContent = label;
     button.addEventListener("click", run);
     return button;
+  }
+
+  function line(text: string, className: string): HTMLParagraphElement {
+    const p = document.createElement("p");
+    p.className = className;
+    p.textContent = text;
+    return p;
+  }
+
+  // A file: what it is, what is in it, what git currently thinks of it, and
+  // the two things you can do about that. Editing writes straight through.
+  function inspectFile(path: string, body: HTMLElement): void {
+    body.append(line(FILE_IS, "what"));
+
+    const text = document.createElement("textarea");
+    text.className = "content";
+    text.value = world.working[path] ?? "";
+    text.setAttribute("aria-label", `Contents of ${path}`);
+    text.addEventListener("input", () => {
+      apply(edit(world, path, text.value));
+    });
+    body.append(text);
+
+    const state = statusFor(world, path);
+    body.append(
+      line(
+        state.untracked
+          ? "Git has never seen this file."
+          : state.modified
+            ? "Changed since your last commit."
+            : state.staged
+              ? "Staged, and ready for the next commit."
+              : "Unchanged since your last commit.",
+        "state",
+      ),
+    );
+
+    if (!isClean(state)) {
+      body.append(
+        verb("Stage this change", () => {
+          const next = stage(world, path);
+          graph.sendObject(`file:${path}`, "index", "inside");
+          // At the blob it just became, not at the compartment: a note beside
+          // the wrong object reads as being about the wrong object.
+          act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
+        }),
+      );
+    }
+    if (state.modified || state.untracked) {
+      body.append(
+        verb(
+          "Discard my change",
+          () => {
+            act(
+              discard(world, path),
+              "files",
+              `Discarded your changes to ${path}. That one is gone.`,
+            );
+          },
+          true,
+        ),
+      );
+    }
+  }
+
+  // A blob is already inside .git, which is exactly why unstaging is cheap
+  // enough to be the first reversal the visitor meets.
+  function inspectBlob(oid: string, body: HTMLElement): void {
+    const path = Object.keys(world.index).find((p) => world.index[p] === oid);
+    body.append(line(BLOB_IS, "what"));
+    if (path === undefined) return;
+    body.append(
+      verb(
+        "Unstage this",
+        () => {
+          act(unstage(world, path), "files", `Unstaged ${path}.`);
+        },
+        true,
+      ),
+    );
+  }
+
+  // The index seals into a snapshot, so its inspector is where a commit is
+  // made: the verb lives on the thing it acts on, not in a toolbar.
+  function inspectIndex(body: HTMLElement): void {
+    if (Object.keys(world.index).length === 0) return;
+    const message = document.createElement("input");
+    message.type = "text";
+    message.className = "message";
+    message.placeholder = "what this change does";
+    message.setAttribute("aria-label", "Commit message");
+    body.append(message);
+    body.append(
+      verb("Commit these changes", () => {
+        const text = message.value.trim() || "a change";
+        const next = commitIndex(world, text);
+        graph.sendObject("index", "git", "inside");
+        act(next, `local:commit:${headOid(next.local) ?? ""}`, `Committed: ${text}.`);
+      }),
+    );
   }
 
   // What this thing is, then what can be done to it. Every verb in the piece
@@ -99,21 +238,27 @@ export function start(): void {
   // becoming a cockpit as the vocabulary grows.
   function inspect(id: string): void {
     const body = document.createElement("div");
-    const what = WHAT[id];
-    if (what !== undefined) {
-      const p = document.createElement("p");
-      p.className = "what";
-      p.textContent = what;
-      body.append(p);
+    let title = id;
+
+    if (id.startsWith("file:")) {
+      title = id.slice(5);
+      inspectFile(title, body);
+    } else if (id.startsWith("blob:")) {
+      title = id.slice(5);
+      inspectBlob(title, body);
+    } else {
+      const what = WHAT[id];
+      if (what !== undefined) body.append(line(what, "what"));
+      if (id === "index") inspectIndex(body);
+      if (id in WHAT) {
+        body.append(
+          verb("Fold this away", () => {
+            toggle(id);
+          }),
+        );
+      }
     }
-    if (id in WHAT) {
-      body.append(
-        verb("Fold this away", () => {
-          toggle(id);
-        }),
-      );
-    }
-    graph.openInspector(id, id, body);
+    graph.openInspector(id, title, body);
   }
 
   // Suggests, never gates. Every legal action stays available whatever this
@@ -135,7 +280,18 @@ export function start(): void {
       suggest("One thing left unopened. Open the index.");
       return;
     }
-    suggest("This is the whole machine. Open a file to see what is in it.");
+    const dirty = Object.keys(world.working).some(
+      (p) => !isClean(statusFor(world, p)),
+    );
+    if (Object.keys(world.index).length > 0) {
+      suggest("The index is holding your change. Open it and commit.");
+      return;
+    }
+    if (dirty) {
+      suggest("Git has noticed. Open the file and stage that change.");
+      return;
+    }
+    suggest("Open a file and change a line. Watch what git does.");
   }
 
   // A closed entity opens; anything else tells you what it is. The first click
