@@ -432,3 +432,7 @@ multiple lines - an 80 char limit is purely for readability.
 ## Overall direction
 
 The entire point of this project is an interactive system that teaches a user how to do something. Do not overengineer something. At every stage, reflect on whether the model is too complicated, and whether a complete beginner will understand the mental model being developed.
+
+## Design Principle: Test at Every Stage 
+
+At every stage of a build plan, create unit tests with 100% code coverage, and ensure the program is functional, without logic bugs or security flaws. You should design the code with testing in mind to make the debug process as seamless as possible.
