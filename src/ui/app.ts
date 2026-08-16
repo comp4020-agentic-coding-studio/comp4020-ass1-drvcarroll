@@ -23,7 +23,6 @@ import {
   branch,
   canFastForward,
   checkout,
-  isAncestor,
   merge,
   resetBack,
   resetTo,
@@ -42,8 +41,17 @@ import { glyphFor, isClean, status, statusFor } from "../git/status.js";
 import { STASH, pop, stash } from "../git/stash.js";
 import { hueFor } from "../git/hash.js";
 import { durationFor } from "./motion.js";
-import type { Control } from "./stages.js";
-import { allowed, promptFor, record, suggested } from "./stages.js";
+import type { Control, Ctx, Cursor } from "./stages.js";
+import {
+  RUNS,
+  START,
+  allowed,
+  nextCursor,
+  runAt,
+  sayFor,
+  stepAt,
+  whyFor,
+} from "./stages.js";
 
 // One sentence per panel, said beside it on hover and read out the moment the
 // visitor's attention (or a screen reader) lands there.
@@ -94,23 +102,39 @@ export function start(): void {
   if (stageEl === null || !(stageEl instanceof HTMLElement)) return;
   const stage_: HTMLElement = stageEl;
   const promptLine = document.querySelector("[data-prompt]");
+  const hintWhere = document.querySelector("[data-hint-where]");
   const hintDo = document.querySelector("[data-hint-do]");
   const hintWhy = document.querySelector("[data-hint-why]");
   const said = document.querySelector("[data-said]");
 
-  const start_ = seed();
-  let world = start_;
-  let met: ReadonlySet<string> = new Set();
+  let world = seed();
   let selectedFile: string | undefined;
   let draft = ""; // a half-typed commit message
   let branchName = ""; // a half-typed new branch name
 
-  // A visitor who has never heard of git meets four entities and five verbs, in
-  // that order, and nothing else until they have used them. "tour" introduces
-  // the entities one at a time; "core" is the whole of collaboration - edit,
-  // save, commit, push, pull, merge; "open" adds branching, stash and rebase
-  // once that loop has closed once and the words mean something.
-  type Phase = "tour" | "core" | "open";
+  // The walk. `cursor` is which run and step; `entry` and `runEntry` are the
+  // worlds those began in, which is what lets a step's question be "since you
+  // were told to do this" rather than an absolute the second cycle would
+  // already satisfy. `seen` carries the one thing a world cannot record: that
+  // a push came back refused.
+  let cursor: Cursor = START;
+  let entry: World = world;
+  let runEntry: World = world;
+  let seen = new Set<string>();
+
+  const ctx = (): Ctx => ({ world, entry, runEntry, seen });
+
+  // The one question the drawing asks the walk. A verb that only one run ever
+  // needs is drawn only while that run needs it - so Branch is not sitting on
+  // screen through the whole of run one being something you must not press.
+  // The core verbs stay drawn and merely go dead, because a beginner should be
+  // able to see what the four entities can do before they are asked to do it.
+  const allows = (control: Control): boolean =>
+    phase === "runs" && allowed(cursor).has(control);
+
+  // The tour names the four entities before any git verb exists. After it, the
+  // runs take over and never stop: three of them, walked in order, then again.
+  type Phase = "tour" | "runs";
   let phase: Phase = "tour";
   let shown = 0; // how many entities the tour has revealed
   let naming = false; // whether the new-branch field is showing
@@ -399,10 +423,19 @@ export function start(): void {
   pushButton.textContent = "Push";
   pushButton.addEventListener("click", () => {
     if (headOid(world.local) === undefined) return;
+    // Whether a teammate answers this one. Read before the push, because act()
+    // moves the walk on and the step that wanted the answer would be gone.
+    // Only run one's push is answered: that run is where the whole point is
+    // somebody else's work arriving, and a reply on any other push would put
+    // the server ahead in the middle of a run that never asked it to be.
+    const answered = runAt(cursor)?.id === "share" && stepAt(cursor)?.id === "push";
     if (!canPush(world)) {
       // Two different refusals, and telling a beginner the wrong one teaches
       // them to pull when there was never anything to pull.
       const level = headOid(world.remote) === headOid(world.local);
+      // The refusal leaves no mark on the world, and being refused is the
+      // whole lesson of one step, so the page has to remember it happened.
+      if (!level) seen.add("push:refused");
       act(
         world,
         "server",
@@ -414,11 +447,11 @@ export function start(): void {
     }
     sendObject("git", "server", "network");
     act(push(world), "server", "Pushed. The server has the same commits.");
-    teammateReplies();
+    if (answered) teammateReplies();
   });
-  // .git: Branch, beside Push and Pull, and silent until the collaboration loop
-  // has closed once. One button that asks for a name when pressed, rather than
-  // an input and a verb standing open forever waiting to be needed.
+  // .git: Branch, beside Push and Pull, and shown only by the step that asks
+  // for it. One button that asks for a name when pressed, rather than an input
+  // and a verb standing open forever waiting to be needed.
   const branchButton = document.createElement("button");
   branchButton.type = "button";
   branchButton.className = "panel-action";
@@ -503,10 +536,10 @@ export function start(): void {
   // folds both into disabled, so the only writer of disabled is here and the
   // two can never quietly undo each other.
   function lock(): void {
-    const may = phase === "tour" ? new Set<Control>() : allowed(met);
+    const may = phase === "tour" ? new Set<Control>() : allowed(cursor);
     for (const el of stage_.querySelectorAll<HTMLElement>("[data-control]")) {
       const named_ = el.dataset["control"] as Control;
-      const off = el.hasAttribute("data-off") || !(may === undefined || may.has(named_));
+      const off = el.hasAttribute("data-off") || !may.has(named_);
       el.toggleAttribute("data-locked", off);
       if (
         el instanceof HTMLButtonElement ||
@@ -524,16 +557,46 @@ export function start(): void {
     if (said !== null) said.textContent = text;
   };
 
-  // The walkthrough, in two halves a beginner needs together: what to do next,
-  // and why it is worth doing. Moved into the entity it points at rather than
-  // drawn at the top of the page, so the instruction and the thing it names are
-  // read in one glance.
+  // The walkthrough, in three parts a beginner needs together: where they are
+  // in the walk, what to do next, and why it is worth doing. The third is the
+  // reason the piece exists - an explainer whose every line reads "press this"
+  // has explained nothing - so it carries real sentences rather than a label.
+  interface Place {
+    run: number;
+    runs: number;
+    step: number;
+    steps: number;
+    title: string;
+  }
+
   // Held so a resize across the breakpoint can re-place the same instruction
   // rather than blanking it: the words are unchanged, only where they live is.
-  let saidHint: { text: string; why: string; at?: string } = { text: "", why: "" };
+  let saidHint: { text: string; why: string; at?: string; place?: Place } = {
+    text: "",
+    why: "",
+  };
 
-  const suggest = (text: string, why: string, at?: string): void => {
-    saidHint = { text, why, ...(at === undefined ? {} : { at }) };
+  const suggest = (
+    text: string,
+    why: string,
+    at?: string,
+    place?: Place,
+  ): void => {
+    saidHint = {
+      text,
+      why,
+      ...(at === undefined ? {} : { at }),
+      ...(place === undefined ? {} : { place }),
+    };
+    if (hintWhere !== null) {
+      hintWhere.textContent =
+        place === undefined
+          ? ""
+          : `Run ${String(place.run)} of ${String(place.runs)} · ` +
+            `${place.title} · step ${String(place.step)} of ` +
+            String(place.steps);
+      hintWhere.toggleAttribute("hidden", place === undefined);
+    }
     if (hintDo !== null) hintDo.textContent = text;
     if (hintWhy !== null) hintWhy.textContent = why;
     if (promptLine !== null) {
@@ -579,8 +642,14 @@ export function start(): void {
     });
   }
 
+  // A moment is the world and the place in the walk together. Storing the
+  // world alone made Undo restore a state the instruction no longer matched.
   interface Moment {
     world: World;
+    cursor: Cursor;
+    entry: World;
+    runEntry: World;
+    seen: ReadonlySet<string>;
     mark?: string;
   }
 
@@ -590,7 +659,7 @@ export function start(): void {
   function remember(mark?: string): void {
     const last = history.at(-1);
     if (mark !== undefined && last?.mark === mark) return;
-    history.push({ world, mark });
+    history.push({ world, cursor, entry, runEntry, seen: new Set(seen), mark });
     if (history.length > DEPTH) history.shift();
     undoButton.disabled = false;
   }
@@ -600,7 +669,7 @@ export function start(): void {
     if (last === undefined) return;
     // A rewind must not be overtaken by a push that is already in the air.
     forgetReply();
-    world = last.world;
+    rewindTo(last);
     undoButton.disabled = history.length === 0;
     advance();
     redraw();
@@ -608,22 +677,42 @@ export function start(): void {
     nextPrompt();
   }
 
-  // Recorded before the redraw, never after: the phase decides which verbs get
-  // drawn, so flipping it afterwards would leave them a whole action behind.
-  // The loop has closed once a teammate has diverged the visitor and the visitor
-  // got back level with him. A fast-forward counts as much as a two-parent
-  // merge: both taught the thing, and pulling their work is usually the former.
-  function settled(): boolean {
-    if (!met.has("diverged")) return false;
-    const theirs = headOid(world.remote);
-    const mine = headOid(world.local);
-    if (theirs === undefined || mine === undefined) return false;
-    return isAncestor(world.local.objects, theirs, mine);
+  // Walked before the redraw, never after: which step is current decides which
+  // verbs get drawn and which are locked, so moving the cursor afterwards would
+  // leave the page a whole action behind the instruction on it.
+  //
+  // A loop rather than a single move, because one action can satisfy several
+  // steps at once - pressing Commit finishes a merge, which completes both the
+  // step that asked for the merge and the step that asked for the seal - and a
+  // walk that only advanced one step per action would fall behind the world.
+  // Bounded by the total number of steps so a predicate that is somehow always
+  // true cannot spin.
+  function advance(): void {
+    if (phase !== "runs") return;
+    const limit = RUNS.reduce((n, r) => n + r.steps.length, 0) + 1;
+    for (let i = 0; i < limit; i += 1) {
+      const step = stepAt(cursor);
+      if (step === undefined || !step.done(ctx())) return;
+      const moved = nextCursor(cursor);
+      // A new run starts from here, and its own steps measure from here.
+      if (moved.run !== cursor.run) {
+        runEntry = world;
+        seen = new Set();
+      }
+      cursor = moved;
+      entry = world;
+    }
   }
 
-  function advance(): void {
-    met = record(met, world, start_);
-    if (phase === "core" && settled()) phase = "open";
+  // Rewinding has to rewind the walk too, or Undo puts the world back and
+  // leaves the instruction talking about something that no longer happened.
+  // The cursor is restored from the same history entry as the world.
+  function rewindTo(moment: Moment): void {
+    world = moment.world;
+    cursor = moment.cursor;
+    entry = moment.entry;
+    runEntry = moment.runEntry;
+    seen = new Set(moment.seen);
   }
 
   function apply(next: World, mark?: string): void {
@@ -672,8 +761,8 @@ export function start(): void {
     const stashed = world.local.refs[STASH] !== undefined;
     const dirty =
       headOid(world.local) !== undefined && !status(world).every(isClean);
-    stashButton.hidden = phase !== "open" || !dirty;
-    popButton.hidden = phase !== "open" || !stashed;
+    stashButton.hidden = !allows("stash") || !dirty;
+    popButton.hidden = !allows("stash") || !stashed;
 
     const files = status(world).filter((s) => s.path in world.working);
     if (selectedFile === undefined || !(selectedFile in world.working)) {
@@ -790,7 +879,7 @@ export function start(): void {
   function renderGit(): void {
     const body = bodies.get("git");
     if (body === undefined) return;
-    branchButton.hidden = phase !== "open";
+    branchButton.hidden = !allows("branch");
     // Push stays live the moment there is a commit, refusal and all: being told
     // why it was refused is the lesson. Pull goes dead until somebody else has
     // actually pushed, because a Pull that fetches nothing teaches nothing.
@@ -956,7 +1045,7 @@ export function start(): void {
           );
           continue;
         }
-        if (phase === "open" && canRebase(world, other)) {
+        if (allows("rebase") && canRebase(world, other)) {
           // canRebase only checks direction, not content: a conflicting
           // replay is refused whole by rebase() itself, so check the result
           // before offering the button - otherwise a real conflict shows a
@@ -985,7 +1074,7 @@ export function start(): void {
           }),
         );
       }
-      if (phase === "open" && headOid(world.local) !== undefined) {
+      if (allows("reset") && headOid(world.local) !== undefined) {
         const back = resetBack(world);
         if (back !== world) {
           wrap.append(
@@ -1042,16 +1131,22 @@ export function start(): void {
     body.append(list);
   }
 
-  // The instruction and the lock read the same stage, so what the line names is
-  // exactly what lock() leaves live. Both retire when the stages run out.
+  // The instruction, the explanation and the lock all read the same step, so
+  // what the line names is exactly what lock() leaves live. The walk never
+  // runs out: past the last step of the last run it starts again at the first.
   function nextPrompt(): void {
     if (phase === "tour") return; // the tour writes its own copy
-    const next = suggested(met);
-    suggest(
-      next === undefined ? "" : promptFor(next, world),
-      next?.teaches ?? "",
-      next?.at,
-    );
+    const step = stepAt(cursor);
+    const run = runAt(cursor);
+    if (step === undefined || run === undefined) return;
+    const c = ctx();
+    suggest(sayFor(step, c), whyFor(step, c), step.at, {
+      run: cursor.run + 1,
+      runs: RUNS.length,
+      step: cursor.step + 1,
+      steps: run.steps.length,
+      title: run.title,
+    });
   }
 
   // Names the next entity and hands it its own sentence. Once all four are
@@ -1065,7 +1160,7 @@ export function start(): void {
     drawArrows();
     suggest(`This is ${PANEL_TITLE[id] ?? id}.`, WHAT[id] ?? "", id);
     if (shown < TOUR_ORDER.length) return;
-    phase = "core";
+    phase = "runs";
     nextButton.remove();
     advance();
     redraw();

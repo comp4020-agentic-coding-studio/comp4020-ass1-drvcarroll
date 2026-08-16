@@ -1,27 +1,34 @@
-// The curriculum. A stage is a concept plus a predicate saying whether the
-// world shows evidence of it, so nothing here can advance without the visitor
-// changing the model.
+// The curriculum: three runs through git, walked in order and then repeated.
 //
-// Nothing in this file returns a permission: a stage is a fact about the world,
-// and the predicates cannot see the interface at all. The page does gate which
-// verbs it draws - a visitor who has never heard of git should not meet rebase
-// in their first minute - but it does that by reading the set these functions
-// return, which keeps the record honest and the gating one layer up where it
-// can be changed without touching the curriculum.
+// A run is a fixed sequence of steps, and a step is an instruction, an
+// explanation, and a predicate saying whether the world now shows the thing
+// the step asked for. The page walks the visitor through run one, then two,
+// then three, and then starts again at one.
+//
+// Two rules make the walk deterministic, and both matter:
+//
+// 1. A step's predicate compares the world against `entry` - the world as it
+//    was when that step became the current one - never against an absolute.
+//    "You made a commit" has to stay answerable on the fourth time round,
+//    when there are already a dozen commits in .git.
+// 2. The runs chain rather than reset. Run one leaves the teammate's work
+//    fetched but unmerged, which is the refused push run two opens on; run
+//    two leaves you level with the server, which is the clean base run three
+//    branches from; run three leaves your line ahead, which is what run one
+//    pushes next time round. Nothing is ever wiped to make a run start.
+//
+// Nothing here can see the interface. A step names the controls it needs and
+// the page locks the rest, which is what keeps the walk unbreakable, but the
+// locking happens one layer up where it can change without touching this.
 
 import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
-import { ancestry } from "../git/objects.js";
-import { isAncestor } from "../git/branch.js";
 import { STASH } from "../git/stash.js";
-import { startMerge } from "../git/merge.js";
 import { canFetch } from "../git/remote.js";
-import { unreachable } from "../git/rebase.js";
 
-// Every control the page can offer, named once so a stage can say which of
-// them its instruction is about. The page tags each button with one of these
-// and locks the rest while the walkthrough is running, so the only things
-// that can be pressed are the things the prompt just named.
+// Every control the page can offer, named once so a step can say which of them
+// its instruction is about. The page tags each button with one of these and
+// locks everything the current step did not name.
 export type Control =
   | "files" // the file list and the editor
   | "save"
@@ -35,27 +42,53 @@ export type Control =
   | "rebase"
   | "reset"; // Move the branch back, and the ghost row's reversal
 
-export interface Stage {
-  readonly id: string;
-  readonly teaches: string;
-  // A function where the instruction has to name a button the visitor named
-  // themselves. "Press Merge" is ambiguous the moment two Merge buttons are on
-  // screen, and telling someone to press the wrong one is worse than vague.
-  readonly prompt: string | ((world: World) => string);
-  // The entity the prompt is about, so the suggestion can be drawn beside it
-  // rather than at the top of the page pointing at nothing.
-  readonly at: string;
-  // What the visitor may touch while this stage is the current one. It has to
-  // cover every control the instruction needs, including the ones that only
-  // set up the state it asks for - a stage that locks away a step on the way
-  // to its own goal is a dead end, which is the one failure worse than an
-  // unlocked page. The sets widen toward the end as the scaffolding fades.
-  readonly allow: readonly Control[];
-  // Two states in, a boolean out. Comparing against the world the visitor
-  // arrived to is what lets "you changed a file" be a fact about state rather
-  // than a counter of clicks.
-  met(world: World, start: World): boolean;
+// Everything a step is allowed to know. Three worlds rather than one, because
+// the questions a step asks are relative: "since this step began" needs entry,
+// and "the branch you made earlier in this run" needs runEntry.
+export interface Ctx {
+  readonly world: World;
+  readonly entry: World; // when this step became current
+  readonly runEntry: World; // when this run became current
+  // Things the page saw happen that leave no trace in the world. Exactly one
+  // step needs this - a refused push changes nothing, and being refused is the
+  // whole lesson of it - so it stays a narrow escape hatch rather than a
+  // second source of truth.
+  readonly seen: ReadonlySet<string>;
 }
+
+export interface Step {
+  readonly id: string;
+  // What to do. A function where the instruction has to name something the
+  // visitor named themselves, because "press Merge" is ambiguous the moment
+  // two Merge buttons are on screen.
+  readonly say: string | ((c: Ctx) => string);
+  // Why it is worth doing. This is the piece, not a footnote to it: an
+  // explainer that only ever says "press this" has explained nothing.
+  readonly why: string | ((c: Ctx) => string);
+  // The entity the instruction is about, so it can be drawn beside it.
+  readonly at: string;
+  // What the visitor may touch while this step is current. It must cover every
+  // control the instruction needs, including the ones only used to set up the
+  // state it asks for: a step that locks away part of its own path is a dead
+  // end, which is the one failure worse than an unlocked page.
+  readonly allow: readonly Control[];
+  done(c: Ctx): boolean;
+}
+
+export interface Run {
+  readonly id: string;
+  readonly title: string;
+  readonly steps: readonly Step[];
+}
+
+// Where the walk is. Two numbers, so it survives being written down and read
+// back, and so a test can assert the exact place the visitor ended up.
+export interface Cursor {
+  readonly run: number;
+  readonly step: number;
+}
+
+// ---- what the predicates ask ----
 
 // Branches you made: not the remote-tracking names fetch writes for you, and
 // not the stash, which is a name for a commit but never a branch you are on.
@@ -65,261 +98,335 @@ function local(world: World): string[] {
   );
 }
 
-// Commits on the line you are standing on. Counting every commit object in the
-// store instead counted the teammate's, which a pull puts in .git - so "commit
-// a second time" was met by fetching someone else's work and the stage was
-// skipped without the visitor having made anything.
-function commits(world: World): number {
-  const head = headOid(world.local);
-  return head === undefined ? 0 : ancestry(world.local.objects, head).length;
+// A commit landed on the line you are standing on. Comparing HEAD against the
+// step's own starting point, so this stays true on the tenth commit as much as
+// the first.
+function committed(c: Ctx): boolean {
+  return headOid(c.world.local) !== headOid(c.entry.local);
 }
 
-// The branch the visitor made and named, as opposed to the one they started on.
-// The prompts have to say it back to them, because it is half of every button
-// label in .git once it exists.
-function theirs(world: World): string {
-  return local(world).find((n) => n !== "main") ?? "your branch";
+// Merge commits are counted rather than detected, because a step that asks for
+// one has to stay satisfied after the next step has moved on: "did a merge
+// happen" must not become false again the moment `merging` is cleared.
+function mergeCommits(world: World): number {
+  return Object.values(world.local.objects).filter(
+    (o) => o.kind === "commit" && o.parents.length >= 2,
+  ).length;
+}
+
+function merged(c: Ctx): boolean {
+  return mergeCommits(c.world) > mergeCommits(c.entry);
+}
+
+// The branch made earlier in this run, which is the one every later step of
+// run three has to name back to the visitor. Measured from the run's start,
+// not the step's, because by the time we need the name several steps have been
+// and gone - and it is deliberately the newest, so a second time round the
+// walk names the branch just made rather than the one from last cycle.
+function newBranch(c: Ctx): string {
+  const before = new Set(local(c.runEntry));
+  const made = local(c.world).filter((n) => !before.has(n));
+  return made[made.length - 1] ?? "your branch";
 }
 
 // Their work is in your .git, which is the only thing a pull actually does and
 // the only trace of it a predicate can see. push() never writes origin/*, so
 // this can only become true by pressing Pull.
-function fetched(world: World): boolean {
-  const theirs = headOid(world.remote);
-  if (theirs === undefined) return false;
+function pulled(c: Ctx): boolean {
   const name =
-    world.remote.head.kind === "branch" ? world.remote.head.name : "main";
-  return world.local.refs[`origin/${name}`] === theirs;
+    c.world.remote.head.kind === "branch" ? c.world.remote.head.name : "main";
+  const now = c.world.local.refs[`origin/${name}`];
+  return now !== undefined && now !== c.entry.local.refs[`origin/${name}`];
 }
 
-// Two lines of your own that have both moved since they last agreed. Neither
-// containing the other is the whole definition, and it is what replaying and
-// merging both need before they have anything to do.
-function diverged(world: World): boolean {
-  const tips = local(world).map((n) => world.local.refs[n]);
-  return tips.some((a) =>
-    tips.some(
-      (b) =>
-        a !== undefined &&
-        b !== undefined &&
-        a !== b &&
-        !isAncestor(world.local.objects, a, b) &&
-        !isAncestor(world.local.objects, b, a),
-    ),
-  );
-}
+// ---- the three runs ----
 
-// Both of you changed the same file, so bringing the lines together has a
-// question in it that git cannot answer. Asking startMerge is the honest test:
-// it is the same code the button runs.
-function collides(world: World): boolean {
-  return local(world).some(
-    (n) => (startMerge(world, n).merging?.conflicts.length ?? 0) > 0,
-  );
-}
-
-export const STAGES: readonly Stage[] = [
+export const RUNS: readonly Run[] = [
   {
-    id: "edit",
-    teaches: "Your files are just files on your machine.",
-    prompt: "Click a file in the list, then type a change in the editor.",
-    at: "files",
-    allow: ["files"],
-    met: (world, start) =>
-      JSON.stringify(world.working) !== JSON.stringify(start.working),
-  },
-  {
-    id: "stage",
-    teaches: "The index is a second place on the same machine.",
-    prompt: "Git has noticed. Press Save to put that change in the index.",
-    at: "files",
-    allow: ["files", "save"],
-    met: (world) => Object.keys(world.index).length > 0,
-  },
-  {
-    id: "commit",
-    teaches: "A commit is a snapshot with a hash, stored locally.",
-    prompt: "Type what the change does in the message box, then press Commit.",
-    at: "index",
-    allow: ["files", "save", "commit"],
-    met: (world) => headOid(world.local) !== undefined,
-  },
-  // Push, a teammate's reply, and the merge that settles it come before
-  // branching: collaboration is the reason git exists, and a beginner who has
-  // never seen a second person touch the repo has no reason to care what a
-  // branch is.
-  {
-    id: "push",
-    teaches: "The server is a different computer, and push is the only way up.",
-    prompt: "Nothing has left your machine yet. Press Push.",
-    at: "git",
-    allow: ["push"],
-    met: (world) => headOid(world.remote) !== undefined,
-  },
-  // This used to be met by the teammate's push rather than by anything the
-  // visitor did, so it was already satisfied two seconds after the push above
-  // and the prompt vanished before it could be followed - the refusal, which is
-  // the entire lesson, was never seen. Pulling is the part the visitor performs,
-  // and it is the only thing here that writes origin/main.
-  {
-    id: "diverged",
-    teaches: "A push is refused when the server has work you do not.",
-    // Two sentences, because for the couple of seconds before the teammate
-    // replies the instruction was describing a push that had not happened and
-    // naming a Pull that was correctly dead. An instruction the page cannot
-    // yet honour is the same bug as a button that does nothing.
-    prompt: (world) =>
-      canFetch(world)
-        ? "A teammate pushed. Press Push to see it refused, then press Pull."
-        : // Says nothing about where your own commit is, because undo can put
-          // this stage back in front of a visitor whose push has been taken
-          // back - and a prompt that claims a push happened is a bug then.
-          "Nothing new from anyone else yet. Give them a moment.",
-    at: "git",
-    allow: ["push", "pull"],
-    met: fetched,
-  },
-  // Your own second commit comes before the merge, and has to. A merge commit
-  // needs both sides to have moved away from a commit they shared: while the
-  // only work that has moved is theirs, pulling is a fast-forward and the
-  // pointer simply slides onto their commit. Asking for the merge first left
-  // the visitor doing exactly as told and watching nothing happen, because
-  // there was no second parent for git to record.
-  {
-    id: "reuse",
-    teaches: "Commits chain to a parent, and share the blobs they can.",
-    prompt:
-      "Click another file, type a change, then press Save and then Commit.",
-    at: "files",
-    allow: ["files", "save", "commit"],
-    met: (world) => commits(world) >= 2,
+    id: "share",
+    title: "Making a change and sharing it",
+    steps: [
+      {
+        id: "edit",
+        say: "Click README.md in the list, then type anything you like into the editor.",
+        why:
+          "These are ordinary files on your own disk. Git is not watching " +
+          "them yet: nothing has been recorded, and nothing has left your " +
+          "computer. The letter beside the name is git telling you what it " +
+          "thinks of each file right now.",
+        at: "files",
+        allow: ["files"],
+        done: (c) =>
+          JSON.stringify(c.world.working) !== JSON.stringify(c.entry.working),
+      },
+      {
+        id: "save",
+        say: "Press Save.",
+        why:
+          "Save stages the change. Git copies the file's contents into .git " +
+          "and writes its name and content id into the index. The index is " +
+          "the list of exactly what your next commit will contain, which is " +
+          "why it is a separate place from your files.",
+        at: "files",
+        allow: ["files", "save"],
+        done: (c) =>
+          JSON.stringify(c.world.index) !== JSON.stringify(c.entry.index),
+      },
+      {
+        id: "commit",
+        say: "Type a short message saying what you changed, then press Commit.",
+        why:
+          "A commit seals the index into a snapshot and names it with an id " +
+          "built from its contents and its parent. It is stored in .git, in " +
+          "a folder inside your project, on your machine. This is why you " +
+          "can commit on a plane.",
+        at: "index",
+        allow: ["files", "save", "commit"],
+        done: committed,
+      },
+      {
+        id: "push",
+        say: "Press Push.",
+        why:
+          "Push is one of only two commands that ever reach the server. It " +
+          "sends the commits the server does not have yet. Everything you " +
+          "have done up to this line happened on your computer alone.",
+        at: "git",
+        allow: ["push"],
+        done: (c) => headOid(c.world.remote) !== headOid(c.entry.remote),
+      },
+      {
+        id: "arrives",
+        say: "Someone else works on this project too. Give them a moment.",
+        why:
+          "The server is a different computer, and other people push to it. " +
+          "That is the whole reason it can hold work your .git has never " +
+          "seen, and the reason the next command exists at all.",
+        at: "server",
+        allow: [],
+        done: (c) => canFetch(c.world),
+      },
+      {
+        id: "pull",
+        say: "Press Pull.",
+        why:
+          "Pull fetches their commits into your .git and moves the " +
+          "origin/main marker to show where the server is. Look at Your " +
+          "Files: nothing there changed. Fetching brings objects across the " +
+          "gap, it does not touch the files you are editing.",
+        at: "git",
+        allow: ["pull"],
+        done: pulled,
+      },
+    ],
   },
   {
     id: "merge",
-    teaches: "A merge commit has two parents, and that is the whole of it.",
-    prompt: "Press Merge origin/main into main, then press Commit.",
-    at: "git",
-    allow: ["merge", "commit", "files", "save"],
-    met: (world) =>
-      Object.values(world.local.objects).some(
-        (o) => o.kind === "commit" && o.parents.length >= 2,
-      ),
+    title: "When two people change one project",
+    steps: [
+      {
+        id: "yours",
+        say: "Click notes.md, type a change, press Save, then press Commit.",
+        why:
+          "You and your teammate have both now moved on from the same " +
+          "starting commit. There are two lines of history in .git, and " +
+          "neither one contains the other. This is what people mean when " +
+          "they say two branches have diverged.",
+        at: "files",
+        allow: ["files", "save", "commit"],
+        done: committed,
+      },
+      {
+        id: "refused",
+        say: "Press Push, and read what comes back.",
+        why:
+          "Refused. The server holds a commit you do not have, and git will " +
+          "never let a push quietly throw away someone else's work. There " +
+          "is no way round this and there is not meant to be: you bring " +
+          "their work into yours first, and then you push.",
+        at: "git",
+        allow: ["push"],
+        // Refused is what this step is for and what run one guarantees. The
+        // second half is a trapdoor, not a second lesson: if the push ever did
+        // go through, Push is the only control this step unlocks and pressing
+        // it again says "nothing to push", so without this the walk would
+        // stall here with no way forward at all. A step that cannot be
+        // completed is worse than a step that taught nothing.
+        done: (c) =>
+          c.seen.has("push:refused") ||
+          headOid(c.world.remote) !== headOid(c.entry.remote),
+      },
+      {
+        id: "combine",
+        say: "Press Merge origin/main into main.",
+        why:
+          "A merge compares three snapshots: the commit you both started " +
+          "from, yours, and theirs. Where only one side changed a file, git " +
+          "takes that change without asking. It only has to ask you when " +
+          "both sides changed the same file.",
+        at: "git",
+        allow: ["merge"],
+        done: (c) => c.world.merging !== undefined || merged(c),
+      },
+      {
+        id: "seal",
+        say: "Press Commit to seal the merge.",
+        why:
+          "A merge commit has two parents, and that is the entire idea: one " +
+          "commit pointing back at both lines of work. Nothing was " +
+          "overwritten and nothing was lost, and the history says exactly " +
+          "what happened.",
+        at: "index",
+        allow: ["merge", "commit"],
+        done: merged,
+      },
+      {
+        id: "share",
+        say: "Press Push again.",
+        why:
+          "Accepted this time. Your line now contains theirs, so there is " +
+          "nothing on the server that your push would overwrite. That test " +
+          "is the only thing push was ever refusing on.",
+        at: "git",
+        allow: ["push"],
+        done: (c) => headOid(c.world.remote) !== headOid(c.entry.remote),
+      },
+    ],
   },
   {
     id: "branch",
-    teaches: "A branch is a pointer, not a copy.",
-    prompt: "Press Branch, type a name, then press Start a branch here.",
-    at: "git",
-    allow: ["branch"],
-    met: (world) => local(world).length >= 2,
-  },
-  {
-    id: "checkout",
-    teaches: "Checking out is what puts different files on your disk.",
-    prompt: (world) => `Click the ${theirs(world)} chip to move onto it.`,
-    at: "git",
-    allow: ["checkout"],
-    met: (world) =>
-      world.local.head.kind === "branch" && world.local.head.name !== "main",
-  },
-  {
-    id: "stash",
-    teaches: "Stash is a commit off to the side, not a special place.",
-    prompt: "Click a file, type a change, then press Put aside instead of Save.",
-    at: "files",
-    allow: ["files", "stash"],
-    met: (world) => Object.keys(world.local.refs).includes(STASH),
-  },
-  // Replaying and colliding both need two lines of work that have moved apart,
-  // and "diverge again" was an instruction to reach a state rather than to press
-  // anything - the visitor had to already understand rebase to follow the prompt
-  // that teaches it. Each is two stages now: one that makes the state with named
-  // buttons, one that acts on it. Both stay on your own two branches, because
-  // pushing from a branch makes an origin/<branch> whose Replay and Merge
-  // buttons read almost identically to main's.
-  {
-    id: "diverge",
-    teaches: "A branch only moves when you commit on it. The other stays put.",
-    prompt:
-      "Change a file, press Save and Commit. Then click the main chip, " +
-      "change a file, and press Save and Commit again.",
-    at: "git",
-    allow: ["files", "save", "commit", "checkout"],
-    met: diverged,
-  },
-  {
-    id: "rebase",
-    teaches:
-      "Your commits are copied on top of theirs, and the copies get new ids, " +
-      "because an id is built from the commit's parent too.",
-    prompt: (world) =>
-      `Click the ${theirs(world)} chip, then press Replay ${theirs(world)} ` +
-      "onto main.",
-    at: "git",
-    allow: ["checkout", "rebase"],
-    met: (world) => unreachable(world).length > 0,
-  },
-  {
-    id: "collide",
-    teaches: "Two people changing one file is the whole of what a conflict is.",
-    prompt:
-      "Change README.md, press Save and Commit. Then click the main chip, " +
-      "change README.md again, and press Save and Commit.",
-    at: "files",
-    allow: ["files", "save", "commit", "checkout"],
-    met: collides,
-  },
-  {
-    id: "conflict",
-    teaches: "A conflict is a state, resolved with the verbs you already have.",
-    prompt: (world) =>
-      `Press Merge ${theirs(world)} into main, and read what lands in ` +
-      ".git/index.",
-    at: "git",
-    allow: ["merge"],
-    met: (world) => (world.merging?.conflicts.length ?? 0) > 0,
+    title: "Working on a branch",
+    steps: [
+      {
+        id: "start",
+        say: "Press Branch, type a name for it, then press Start a branch here.",
+        why:
+          "A branch is a name pointing at a commit. Starting one copies " +
+          "nothing, creates no snapshot and touches no file: it writes a " +
+          "single line into .git. That is why branching in git is instant " +
+          "however large the project is.",
+        at: "git",
+        allow: ["branch"],
+        done: (c) => local(c.world).length > local(c.entry).length,
+      },
+      {
+        id: "move",
+        say: (c) => `Click the ${newBranch(c)} chip to move onto it.`,
+        why:
+          "HEAD is the marker for where you are standing. Checking out " +
+          "moves it to that branch and writes that commit's snapshot back " +
+          "over your files. The dot beside a name is how you tell which one " +
+          "you are on.",
+        at: "git",
+        allow: ["checkout"],
+        done: (c) =>
+          c.world.local.head.kind === "branch" &&
+          c.entry.local.head.kind === "branch" &&
+          c.world.local.head.name !== c.entry.local.head.name,
+      },
+      {
+        id: "work",
+        say: "Click main.ts, type a change, press Save, then press Commit.",
+        why: (c) =>
+          `The commit lands on ${newBranch(c)} and moves only that name. ` +
+          "main has not moved at all. Two names now point at two different " +
+          "commits, which is all a branch has ever been.",
+        at: "files",
+        allow: ["files", "save", "commit"],
+        done: committed,
+      },
+      {
+        id: "back",
+        say: "Click the main chip to go back to main.",
+        why:
+          "Your files change back to what main says. The commit you just " +
+          "made is still in .git, exactly where you left it, waiting for " +
+          "the name that points at it. Moving between branches never " +
+          "deletes anything.",
+        at: "git",
+        allow: ["checkout"],
+        // Standing on main, having not been standing on main when this step
+        // began. Comparing HEAD's commit instead would be wrong the moment
+        // the two branches happen to point at the same one.
+        done: (c) =>
+          c.world.local.head.kind === "branch" &&
+          c.world.local.head.name === "main" &&
+          !(
+            c.entry.local.head.kind === "branch" &&
+            c.entry.local.head.name === "main"
+          ),
+      },
+      {
+        id: "diverge",
+        say: "Click styles.css, type a change, press Save, then press Commit.",
+        why:
+          "Now both lines have moved since they split apart. This is the " +
+          "same shape as run two, with one difference that turns out not to " +
+          "be a difference at all: this time both lines are yours.",
+        at: "files",
+        allow: ["files", "save", "commit"],
+        done: committed,
+      },
+      {
+        id: "combine",
+        say: (c) => `Press Merge ${newBranch(c)} into main.`,
+        why:
+          "The same three-snapshot comparison as before: what the two " +
+          "branches last agreed on, what main did, what your branch did. " +
+          "Git does not care in the slightest that both sides were you.",
+        at: "git",
+        allow: ["merge"],
+        done: (c) => c.world.merging !== undefined || merged(c),
+      },
+      {
+        id: "seal",
+        say: "Press Commit.",
+        why:
+          "One commit, two parents, both lines kept. That is a merge, " +
+          "whether the other side was a teammate on another machine or you " +
+          "on another branch. There was only ever one mechanism here.",
+        at: "index",
+        allow: ["merge", "commit"],
+        done: merged,
+      },
+    ],
   },
 ];
 
-// Union, never replacement: a stage met stays met even when the world moves
-// past the evidence, because a visitor who commits has still learned what an
-// edit was. This is memory of state, not a count of actions.
-export function record(
-  met: ReadonlySet<string>,
-  world: World,
-  start: World,
-): ReadonlySet<string> {
-  const next = new Set(met);
-  for (const stage of STAGES) if (stage.met(world, start)) next.add(stage.id);
-  return next;
+// ---- walking it ----
+
+export const START: Cursor = { run: 0, step: 0 };
+
+export function runAt(cursor: Cursor): Run | undefined {
+  return RUNS[cursor.run];
 }
 
-// The first concept not yet shown, whatever order they arrived in. Undefined
-// once they are all met: the scaffolding retires and free play begins.
-export function suggested(met: ReadonlySet<string>): Stage | undefined {
-  return STAGES.find((stage) => !met.has(stage.id));
+export function stepAt(cursor: Cursor): Step | undefined {
+  return runAt(cursor)?.steps[cursor.step];
 }
 
-// The instruction, with the visitor's own branch names in it where the button
-// labels have them.
-export function promptFor(stage: Stage, world: World): string {
-  return typeof stage.prompt === "string" ? stage.prompt : stage.prompt(world);
+// The next place, wrapping past the last run back to the first. The walk never
+// ends: three runs is the whole curriculum and it repeats, so there is no
+// terminal state to special-case.
+export function nextCursor(cursor: Cursor): Cursor {
+  const run = RUNS[cursor.run];
+  if (run !== undefined && cursor.step + 1 < run.steps.length) {
+    return { run: cursor.run, step: cursor.step + 1 };
+  }
+  return { run: (cursor.run + 1) % RUNS.length, step: 0 };
 }
 
-export function suggestion(
-  met: ReadonlySet<string>,
-  world: World,
-): string | undefined {
-  const stage = suggested(met);
-  return stage === undefined ? undefined : promptFor(stage, world);
+export function sayFor(step: Step, c: Ctx): string {
+  return typeof step.say === "string" ? step.say : step.say(c);
 }
 
-// What the visitor may touch, or undefined for "anything". Undefined is the
-// answer once the stages are exhausted: the scaffolding retires and the page
-// becomes the free-play model it was always underneath. Keeping that as one
-// exported function means the lock and the prompt can never disagree about
-// which stage is current, because they read the same one.
-export function allowed(met: ReadonlySet<string>): ReadonlySet<Control> | undefined {
-  const stage = suggested(met);
-  return stage === undefined ? undefined : new Set(stage.allow);
+export function whyFor(step: Step, c: Ctx): string {
+  return typeof step.why === "string" ? step.why : step.why(c);
 }
+
+// What the visitor may touch. Never undefined: the walk always has a current
+// step, so there is always an answer, and the page never has to guess.
+export function allowed(cursor: Cursor): ReadonlySet<Control> {
+  return new Set(stepAt(cursor)?.allow ?? []);
+}
+
