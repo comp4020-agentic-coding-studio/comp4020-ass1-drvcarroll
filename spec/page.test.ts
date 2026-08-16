@@ -121,12 +121,15 @@ const core = (): void => {
   commit("README.md", "changed\n", "explain the readme");
   click(named(panel("git"), "Push"));
   vi.advanceTimersByTime(2000);
-  commit("notes.md", "todo\n", "start the notes");
+  // The refused push and the pull that answers it: the visitor performs both,
+  // which is what marks the diverged stage met.
+  click(named(panel("git"), "Push"));
   click(named(panel("git"), "Pull"));
-  click(named(panel("git"), "Merge origin/main"));
+  commit("notes.md", "todo\n", "start the notes");
+  click(named(panel("git"), "Merge origin/main into main"));
   const field = panel("index")?.querySelector<HTMLInputElement>(".message");
   if (field === null || field === undefined) throw new Error("no message");
-  type(field, "merge gary");
+  type(field, "merge bonnie");
   click(named(panel("index"), "Commit"));
 };
 
@@ -155,11 +158,11 @@ describe("the page boots", () => {
     expect(document.querySelectorAll(".file-list li").length).toBeGreaterThan(3);
   });
 
-  it("puts Gary beside the server, named", () => {
-    const gary = document.querySelector("[data-actor='gary']");
-    expect(gary).toBeTruthy();
-    expect(panel("server")?.contains(gary as Node)).toBe(true);
-    expect(gary?.textContent).toContain("Gary");
+  it("puts the teammates beside the server, named", () => {
+    const bonnie = document.querySelector("[data-actor='bonnie']");
+    expect(bonnie).toBeTruthy();
+    expect(panel("server")?.contains(bonnie as Node)).toBe(true);
+    expect(bonnie?.textContent).toContain("Bonnie");
   });
 });
 
@@ -205,6 +208,94 @@ describe("the tour introduces one entity at a time", () => {
     tour();
     expect(hint()).toContain("Click a file");
     expect(panel("files")?.querySelector("[data-hint-do]")).toBeTruthy();
+  });
+});
+
+// Doing exactly and only what each instruction says, from the first press to
+// the last. This is the test that would have caught every narrative bug so far:
+// a prompt met by something the visitor never did, a prompt naming a state
+// instead of a button, and a prompt naming a button that two buttons answer to.
+// Every step below is the literal text of the hint that was on screen, and the
+// assertion after it is that the hint moved on.
+describe("every instruction can be followed, and moves the story on", () => {
+  it("walks the whole curriculum by its own prompts", () => {
+    vi.useFakeTimers();
+    boot();
+    tour();
+    const seen: string[] = [];
+    // Each instruction has to leave a different one behind it. A repeat means
+    // the visitor did as told and the page ignored them.
+    const step = (instruction: string, act: () => void): void => {
+      expect(hint()).not.toBe("");
+      expect(seen).not.toContain(hint());
+      expect(hint()).toContain(instruction);
+      seen.push(hint());
+      act();
+      expect(hint()).not.toBe(seen.at(-1));
+    };
+
+    step("Click a file", () => {
+      commit("README.md", "changed\n", "explain the readme");
+    });
+    step("Press Push", () => {
+      click(named(panel("git"), "Push"));
+      // The teammate the next instruction talks about. Until they have really
+      // pushed, the prompt says so rather than naming a Pull that is dead.
+      expect(hint()).toContain("Nothing new from anyone else");
+      vi.advanceTimersByTime(2000);
+    });
+    step("Press Push to see it refused, then press Pull", () => {
+      click(named(panel("git"), "Push"));
+      expect(said()).toContain("Refused");
+      click(named(panel("git"), "Pull"));
+    });
+    step("Click another file", () => {
+      commit("notes.md", "todo\n", "start the notes");
+    });
+    step("Press Merge origin/main into main", () => {
+      click(named(panel("git"), "Merge origin/main into main"));
+      const field = panel("index")?.querySelector<HTMLInputElement>(".message");
+      type(field as HTMLInputElement, "merge bonnie");
+      click(named(panel("index"), "Commit"));
+    });
+    step("Press Branch", () => {
+      click(named(panel("git"), "Branch"));
+      const field = panel("git")?.querySelector<HTMLInputElement>(
+        ".branch-controls .message",
+      );
+      type(field as HTMLInputElement, "spike");
+      click(named(panel("git"), "Start a branch here"));
+    });
+    step("Click the spike chip", () => {
+      click(named(panel("git"), "spike"));
+    });
+    step("Put aside", () => {
+      pick("styles.css");
+      type(editor(), "body { color: red }\n");
+      click(named(panel("files"), "Put aside"));
+    });
+    step("click the main chip", () => {
+      commit("main.ts", "console.log('spike');\n", "spike work");
+      click(named(panel("git"), "main"));
+      commit("package.json", '{ "name": "x" }\n', "main work");
+    });
+    step("press Replay spike onto main", () => {
+      click(named(panel("git"), "spike"));
+      click(named(panel("git"), "Replay spike onto main"));
+    });
+    step("Change README.md", () => {
+      commit("README.md", "spike line\n", "readme on spike");
+      click(named(panel("git"), "main"));
+      commit("README.md", "main line\n", "readme on main");
+    });
+    step("Press Merge spike into main", () => {
+      click(named(panel("git"), "Merge spike into main"));
+    });
+
+    // Twelve instructions, all followed, and the scaffolding retires.
+    expect(seen).toHaveLength(12);
+    expect(hint()).toBe("");
+    vi.useRealTimers();
   });
 });
 
@@ -341,7 +432,7 @@ describe("edit, save, commit", () => {
   });
 });
 
-describe("Gary, two seconds after every push", () => {
+describe("a teammate, two seconds after every push", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     boot();
@@ -366,7 +457,7 @@ describe("Gary, two seconds after every push", () => {
   it("pushes a real commit at two, and says what it means", () => {
     vi.advanceTimersByTime(2000);
     expect(rows("server").length).toBe(2);
-    expect(said()).toContain("Gary");
+    expect(said()).toContain("Bonnie");
     expect(said()).toContain("refused");
   });
 
@@ -378,7 +469,7 @@ describe("Gary, two seconds after every push", () => {
     expect(rows("server").length).toBe(2);
   });
 
-  it("brings his commit down on Pull without touching your files", () => {
+  it("brings their commit down on Pull without touching your files", () => {
     vi.advanceTimersByTime(2000);
     const before = editor().value;
     click(named(panel("git"), "Pull"));
@@ -387,14 +478,14 @@ describe("Gary, two seconds after every push", () => {
     expect(said()).toContain("not changed");
   });
 
-  // The whole reason his push has to be real: merging it has to put his line in
-  // a file the visitor can then read.
-  it("merges his line into your file", () => {
+  // The whole reason their push has to be real: merging it has to put their
+  // line in a file the visitor can then read.
+  it("merges their line into your file", () => {
     vi.advanceTimersByTime(2000);
     click(named(panel("git"), "Pull"));
     click(named(panel("git"), "Merge origin/main"));
     pick("README.md");
-    expect(editor().value).toContain("hi, my name is gary!");
+    expect(editor().value).toContain("hi, my name is bonnie!");
   });
 
   it("opens the advanced verbs once the loop has closed", () => {
@@ -418,7 +509,7 @@ describe("Gary, two seconds after every push", () => {
   it("cannot be overtaken by an undo", () => {
     click(named(document.body, "Undo"));
     vi.advanceTimersByTime(2000);
-    expect(said()).not.toContain("Gary");
+    expect(said()).not.toContain("Bonnie");
   });
 
   // The narrative used to dead-end here. Merging a teammate who committed on
@@ -428,24 +519,29 @@ describe("Gary, two seconds after every push", () => {
   // lesson: your own second commit is what makes the merge a merge.
   it("asks for your own second commit before it asks for a merge", () => {
     vi.advanceTimersByTime(2000);
-    expect(hint()).toContain("Pick another file");
+    click(named(panel("git"), "Push"));
+    click(named(panel("git"), "Pull"));
+    expect(hint()).toContain("Click another file");
   });
 
   it("asks for the merge only once both sides have moved", () => {
     vi.advanceTimersByTime(2000);
+    click(named(panel("git"), "Push"));
+    click(named(panel("git"), "Pull"));
     commit("notes.md", "todo\n", "start the notes");
-    expect(hint()).toContain("Pull");
-    expect(hint()).toContain("Merge origin/main");
+    expect(hint()).toContain("Merge origin/main into main");
+    expect(hint()).toContain("Commit");
   });
 
   it("seals a real two-parent commit, and moves the narrative on", () => {
     vi.advanceTimersByTime(2000);
-    commit("notes.md", "todo\n", "start the notes");
+    click(named(panel("git"), "Push"));
     click(named(panel("git"), "Pull"));
-    click(named(panel("git"), "Merge origin/main"));
+    commit("notes.md", "todo\n", "start the notes");
+    click(named(panel("git"), "Merge origin/main into main"));
     const field = panel("index")?.querySelector<HTMLInputElement>(".message");
     if (field === null || field === undefined) throw new Error("no message");
-    type(field, "merge gary");
+    type(field, "merge bonnie");
     click(named(panel("index"), "Commit"));
     // The stage is met, so the prompt has to have moved off the merge.
     expect(hint()).not.toContain("merge");
@@ -466,8 +562,8 @@ describe("the teammates take turns", () => {
     vi.useRealTimers();
   });
 
-  it("draws all three beside the server, named", () => {
-    for (const name of ["Gary", "Bonnie", "Clyde"]) {
+  it("draws both beside the server, named", () => {
+    for (const name of ["Bonnie", "Clyde"]) {
       const actor = document.querySelector(`[data-actor='${name.toLowerCase()}']`);
       expect(actor).toBeTruthy();
       expect(panel("server")?.contains(actor as Node)).toBe(true);
@@ -492,22 +588,23 @@ describe("the teammates take turns", () => {
     const before = rows("server").length;
     click(named(panel("git"), "Push"));
     vi.advanceTimersByTime(2000);
-    expect(said()).toContain("Gary");
-    expect(said()).not.toContain("Bonnie");
+    expect(said()).toContain("Bonnie");
+    expect(said()).not.toContain("Clyde");
     // Exactly one commit arrived, so only one of them pushed.
     expect(rows("server").length).toBe(before + 2);
-
-    settle("README.md", "merge gary");
-    click(named(panel("git"), "Push"));
-    vi.advanceTimersByTime(2000);
-    expect(said()).toContain("Bonnie");
-    expect(said()).not.toContain("Gary");
 
     settle("README.md", "merge bonnie");
     click(named(panel("git"), "Push"));
     vi.advanceTimersByTime(2000);
     expect(said()).toContain("Clyde");
     expect(said()).not.toContain("Bonnie");
+
+    // Two of them, so the third push comes back round to the first.
+    settle("README.md", "merge clyde");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    expect(said()).toContain("Bonnie");
+    expect(said()).not.toContain("Clyde");
   });
 });
 
@@ -611,6 +708,88 @@ describe("everything can be taken back", () => {
   });
 });
 
+// Pull was pressable the moment anything had been pushed, including your own
+// push, so a visitor could answer "press Push, see it refused, then press Pull"
+// by pressing Pull on their own commit two seconds early - fetching nothing,
+// learning nothing, and skipping the refusal that is the entire lesson. Pull
+// now goes dead until somebody else's commit is genuinely up there.
+describe("Pull is dead until there is something to pull", () => {
+  const pull = (): HTMLButtonElement => named(panel("git"), "Pull");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    boot();
+    tour();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is dead on an empty server", () => {
+    expect(pull().disabled).toBe(true);
+  });
+
+  it("stays dead after your own push, because you already have it all", () => {
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    expect(rows("server").length).toBe(1);
+    expect(pull().disabled).toBe(true);
+  });
+
+  it("comes alive only once a teammate has pushed", () => {
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    expect(pull().hasAttribute("data-off")).toBe(false);
+    expect(pull().disabled).toBe(false);
+  });
+
+  it("goes dead again once their commit is in .git", () => {
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    click(pull());
+    expect(chips("git")).toContain("origin/main");
+    expect(pull().disabled).toBe(true);
+  });
+
+  // The stage it guards: reaching "diverged" has to mean the refusal was seen,
+  // not that Pull happened to be pressable.
+  // A stage stays met once met, so undoing the push puts this instruction back
+  // in front of a visitor whose commit is no longer on the server. It must not
+  // be describing a push that has been taken back.
+  it("claims nothing about a push that has been undone", () => {
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    click(named(document.body, "Undo"));
+    expect(rows("server").length).toBe(0);
+    expect(hint()).not.toContain("your commit");
+    expect(hint().toLowerCase()).not.toContain("on the server");
+    // The cancelled teammate must not arrive on a push that no longer happened.
+    vi.advanceTimersByTime(2000);
+    expect(rows("server").length).toBe(0);
+  });
+
+  it("never names a Pull the page would refuse to perform", () => {
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    // Nobody has pushed yet, so the instruction must not claim they have.
+    expect(hint()).not.toContain("Pull");
+    expect(pull().disabled).toBe(true);
+
+    // Once they have, the instruction and the button agree.
+    vi.advanceTimersByTime(2000);
+    expect(hint()).toContain("refused");
+    expect(hint()).toContain("Pull");
+    expect(pull().disabled).toBe(false);
+
+    click(named(panel("git"), "Push"));
+    click(pull());
+    expect(hint()).not.toContain("refused");
+  });
+});
+
 describe("on a phone", () => {
   beforeEach(() => {
     boot(390);
@@ -623,7 +802,36 @@ describe("on a phone", () => {
     expect(shown(head).map((b) => b.textContent)).toEqual(["Pull", "Push"]);
   });
 
-  it("keeps the walkthrough inside the entity it points at", () => {
-    expect(panel("files")?.querySelector("[data-hint-do]")).toBeTruthy();
+  // No gutter at this width, so the instruction is a bar across the top of the
+  // screen rather than a column beside a panel - and the accent border on the
+  // panel it names is what points, exactly as it does wide.
+  it("lifts the walkthrough out to a bar above the picture", () => {
+    const prompt = document.querySelector("[data-prompt]");
+    expect(prompt?.parentElement?.classList.contains("screen")).toBe(true);
+    expect(panel("files")?.getAttribute("data-hint")).toBe("true");
+  });
+
+  it("still says what the instruction is, and why", () => {
+    expect(hint()).not.toBe("");
+    expect(why()).not.toBe("");
+  });
+
+  // Every verb the wide page offers has to be reachable here too: a phone that
+  // can only read the picture is not the same artefact.
+  it("walks the core loop by click alone, exactly as the wide page does", () => {
+    vi.useFakeTimers();
+    commit("README.md", "changed\n", "explain the readme");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    click(named(panel("git"), "Push"));
+    expect(said()).toContain("Refused");
+    click(named(panel("git"), "Pull"));
+    commit("notes.md", "todo\n", "start the notes");
+    click(named(panel("git"), "Merge origin/main into main"));
+    const field = panel("index")?.querySelector<HTMLInputElement>(".message");
+    type(field as HTMLInputElement, "merge bonnie");
+    click(named(panel("index"), "Commit"));
+    expect(named(panel("git"), "Branch")).toBeTruthy();
+    vi.useRealTimers();
   });
 });

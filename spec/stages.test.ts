@@ -6,7 +6,8 @@ import {
   stage,
   unstage,
 } from "../src/git/repo.js";
-import { STAGES, record, suggestion } from "../src/ui/stages.js";
+import type { Stage } from "../src/ui/stages.js";
+import { STAGES, promptFor, record, suggestion } from "../src/ui/stages.js";
 
 // Two claims are being defended here, and they are the difference between an
 // explorable model and a tutorial: no stage can be met without a real change
@@ -53,9 +54,8 @@ describe("stages record, they never gate", () => {
 
   it("skips the prompt ahead to whatever is still unexplored", () => {
     const world = commitIndex(stage(start(), "a.txt"), "out of order");
-    expect(suggestion(met(world))).toBe(
-      STAGES.find((s) => s.id === "edit")?.prompt,
-    );
+    const edit_ = STAGES.find((s) => s.id === "edit") as Stage;
+    expect(suggestion(met(world), world)).toBe(promptFor(edit_, world));
   });
 
   it("keeps a stage met after the evidence for it is undone", () => {
@@ -68,12 +68,12 @@ describe("stages record, they never gate", () => {
 
 describe("scaffolding fades", () => {
   it("retires the prompt once every stage has been met", () => {
-    expect(suggestion(new Set(STAGES.map((s) => s.id)))).toBeUndefined();
+    expect(suggestion(new Set(STAGES.map((s) => s.id)), start())).toBeUndefined();
   });
 
   it("suggests the first unmet concept, in curriculum order", () => {
-    expect(suggestion(new Set(["edit"]))).toBe(
-      STAGES.find((s) => s.id === "stage")?.prompt,
-    );
+    const world = start();
+    const next = STAGES.find((s) => s.id === "stage") as Stage;
+    expect(suggestion(new Set(["edit"]), world)).toBe(promptFor(next, world));
   });
 });

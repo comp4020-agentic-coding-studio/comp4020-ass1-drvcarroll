@@ -29,6 +29,7 @@ import {
   resetTo,
 } from "../git/branch.js";
 import {
+  canFetch,
   canPush,
   entriesAt,
   fetch,
@@ -42,7 +43,7 @@ import { STASH, pop, stash } from "../git/stash.js";
 import { hueFor } from "../git/hash.js";
 import { durationFor } from "./motion.js";
 import type { Control } from "./stages.js";
-import { allowed, record, suggested } from "./stages.js";
+import { allowed, promptFor, record, suggested } from "./stages.js";
 
 // One sentence per panel, said beside it on hover and read out the moment the
 // visitor's attention (or a screen reader) lands there.
@@ -145,7 +146,15 @@ export function start(): void {
   const bodies = new Map<string, HTMLElement>();
   const actions = new Map<string, HTMLElement>();
 
-  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  // Width, not pointer type. The marking viewport is a 390px-wide Chrome window
+  // on a desktop, which reports a fine pointer and hover - so gating the narrow
+  // layout on `pointer: coarse` left that visitor with the gutters, the hover
+  // notes and none of the taps. One query, matching the stylesheet's own
+  // breakpoint, decides both halves.
+  const narrow = window.matchMedia("(max-width: 700px)");
+  // The prompt's home when there is no gutter to put it in: a bar across the
+  // top of the screen, above the picture rather than inside one panel of it.
+  const screenEl = promptLine?.parentElement ?? null;
 
   function makePanel(id: string): HTMLElement {
     const panel = document.createElement("section");
@@ -169,18 +178,19 @@ export function start(): void {
     panel.append(head, body);
     const what = WHAT[id];
     if (what !== undefined) {
-      if (coarse) {
-        panel.addEventListener("click", (event) => {
-          const target = event.target as HTMLElement;
-          if (target.closest("button, input, select, textarea, li")) return;
-          showTouchNote(id, what);
-        });
-      } else {
-        const desc = document.createElement("p");
-        desc.className = "desc";
-        desc.textContent = what;
-        panel.append(desc);
-      }
+      // Both paths are built once and the width picks between them live, so a
+      // resize across the breakpoint never leaves a panel with no way to say
+      // what it is. Wide: a note in the gutter on hover. Narrow: a tap.
+      const desc = document.createElement("p");
+      desc.className = "desc";
+      desc.textContent = what;
+      panel.append(desc);
+      panel.addEventListener("click", (event) => {
+        if (!narrow.matches) return;
+        const target = event.target as HTMLElement;
+        if (target.closest("button, input, select, textarea, li")) return;
+        showTouchNote(id, what);
+      });
     }
     panels.set(id, panel);
     bodies.set(id, body);
@@ -250,13 +260,13 @@ export function start(): void {
     }
   }
 
-  // The people you are not. Three of them so "a teammate pushes" reads as a
-  // team rather than one scripted rival, standing outside the server's left
-  // border because none of them is part of your machine and never was. They
-  // take turns - one push per turn, in the same top-to-bottom order they are
-  // drawn in - rather than all three replying at once, which is what keeps
-  // "your next push is refused" a single clear lesson instead of a pile-up.
-  const TEAMMATE_NAMES = ["Gary", "Bonnie", "Clyde"] as const;
+  // The people you are not. Two of them so "a teammate pushes" reads as a team
+  // rather than one scripted rival, standing outside the server's left border
+  // because neither is part of your machine and never was. They take turns -
+  // one push per turn, in the same top-to-bottom order they are drawn in -
+  // rather than both replying at once, which is what keeps "your next push is
+  // refused" a single clear lesson instead of a pile-up.
+  const TEAMMATE_NAMES = ["Bonnie", "Clyde"] as const;
 
   function makeActor(name: string, index: number): HTMLElement {
     const actor = document.createElement("div");
@@ -286,10 +296,10 @@ export function start(): void {
   for (const mate of teammates) bodies.set(`teammate:${mate.name}`, mate.el);
   let teammateTurn = 0;
 
-  let garyTimer: number | undefined;
-  function forgetGary(): void {
-    if (garyTimer !== undefined) clearTimeout(garyTimer);
-    garyTimer = undefined;
+  let replyTimer: number | undefined;
+  function forgetReply(): void {
+    if (replyTimer !== undefined) clearTimeout(replyTimer);
+    replyTimer = undefined;
   }
 
   const lineFor = (name: string): string => `hi, my name is ${name.toLowerCase()}!\n`;
@@ -319,12 +329,12 @@ export function start(): void {
 
   // Two seconds after every push of yours, not once: the refusal it causes is
   // the lesson, and a lesson you meet once is a cutscene. Only the next
-  // teammate in line replies - never more than one at a time.
-  function garyReplies(): void {
-    forgetGary();
+  // teammate in line replies - never both at once.
+  function teammateReplies(): void {
+    forgetReply();
     const wait = durationFor("network") === 0 ? 0 : 2000;
-    garyTimer = window.setTimeout(() => {
-      garyTimer = undefined;
+    replyTimer = window.setTimeout(() => {
+      replyTimer = undefined;
       const mate = teammates[teammateTurn % teammates.length];
       if (mate === undefined) return;
       const target = teammateTarget(world, mate.name);
@@ -369,14 +379,16 @@ export function start(): void {
   });
   actions.get("index")?.append(commitButton);
 
-  // .git: Push and Pull, in its header. Pull is exactly a fetch.
+  // .git: Push and Pull, in its header. Pull is exactly a fetch, and it is dead
+  // until a teammate has actually pushed - pressing it any other time taught
+  // the beginner that Pull is just a button you press after Push.
   const pullButton = document.createElement("button");
   pullButton.type = "button";
   pullButton.className = "panel-action";
   pullButton.dataset["control"] = "pull";
   pullButton.textContent = "Pull";
   pullButton.addEventListener("click", () => {
-    if (headOid(world.remote) === undefined) return;
+    if (!canFetch(world)) return;
     sendObject("server", "git", "network");
     act(fetch(world), "git", "Fetched. Your files have not changed.");
   });
@@ -402,7 +414,7 @@ export function start(): void {
     }
     sendObject("git", "server", "network");
     act(push(world), "server", "Pushed. The server has the same commits.");
-    garyReplies();
+    teammateReplies();
   });
   // .git: Branch, beside Push and Pull, and silent until the collaboration loop
   // has closed once. One button that asks for a name when pressed, rather than
@@ -516,19 +528,31 @@ export function start(): void {
   // and why it is worth doing. Moved into the entity it points at rather than
   // drawn at the top of the page, so the instruction and the thing it names are
   // read in one glance.
+  // Held so a resize across the breakpoint can re-place the same instruction
+  // rather than blanking it: the words are unchanged, only where they live is.
+  let saidHint: { text: string; why: string; at?: string } = { text: "", why: "" };
+
   const suggest = (text: string, why: string, at?: string): void => {
+    saidHint = { text, why, ...(at === undefined ? {} : { at }) };
     if (hintDo !== null) hintDo.textContent = text;
     if (hintWhy !== null) hintWhy.textContent = why;
     if (promptLine !== null) {
       promptLine.toggleAttribute("hidden", text === "");
-      const host = at === undefined ? undefined : panels.get(at);
-      if (host !== undefined) host.append(promptLine);
+      // Narrow has no gutter to point from, so the instruction becomes a bar
+      // across the top of the screen and the accent border does the pointing.
+      if (narrow.matches) screenEl?.prepend(promptLine);
+      else if (at !== undefined) panels.get(at)?.append(promptLine);
     }
     for (const [id, panel] of panels) {
       if (id === at) panel.setAttribute("data-hint", "true");
       else panel.removeAttribute("data-hint");
     }
   };
+
+  narrow.addEventListener("change", () => {
+    closeTouchNote();
+    suggest(saidHint.text, saidHint.why, saidHint.at);
+  });
 
   // A commit rising out of one compartment and into the next: the one piece
   // of the old picture's motion this rewrite keeps, aimed at real panels.
@@ -575,7 +599,7 @@ export function start(): void {
     const last = history.pop();
     if (last === undefined) return;
     // A rewind must not be overtaken by a push that is already in the air.
-    forgetGary();
+    forgetReply();
     world = last.world;
     undoButton.disabled = history.length === 0;
     advance();
@@ -586,9 +610,9 @@ export function start(): void {
 
   // Recorded before the redraw, never after: the phase decides which verbs get
   // drawn, so flipping it afterwards would leave them a whole action behind.
-  // The loop has closed once Gary has diverged the visitor and the visitor has
+  // The loop has closed once a teammate has diverged the visitor and the visitor
   // got back level with him. A fast-forward counts as much as a two-parent
-  // merge: both taught the thing, and pulling Gary's work is usually the former.
+  // merge: both taught the thing, and pulling their work is usually the former.
   function settled(): boolean {
     if (!met.has("diverged")) return false;
     const theirs = headOid(world.remote);
@@ -767,6 +791,11 @@ export function start(): void {
     const body = bodies.get("git");
     if (body === undefined) return;
     branchButton.hidden = phase !== "open";
+    // Push stays live the moment there is a commit, refusal and all: being told
+    // why it was refused is the lesson. Pull goes dead until somebody else has
+    // actually pushed, because a Pull that fetches nothing teaches nothing.
+    pushButton.toggleAttribute("data-off", headOid(world.local) === undefined);
+    pullButton.toggleAttribute("data-off", !canFetch(world));
     body.replaceChildren();
 
     const head = headOid(world.local);
@@ -885,7 +914,7 @@ export function start(): void {
   // branch is a name pinned to a commit, and it is already drawn that way on the
   // row it points at - so checkout lives on that chip, and this holds only the
   // verbs that move pointers around. Merge is always here, because settling with
-  // Gary is the core loop; replay and reset wait for open, since rebase in
+  // a teammate is the core loop; replay and reset wait for open, since rebase in
   // someone's first minute teaches nothing.
   function branchControls(): HTMLElement {
     const wrap = document.createElement("div");
@@ -1018,7 +1047,11 @@ export function start(): void {
   function nextPrompt(): void {
     if (phase === "tour") return; // the tour writes its own copy
     const next = suggested(met);
-    suggest(next?.prompt ?? "", next?.teaches ?? "", next?.at);
+    suggest(
+      next === undefined ? "" : promptFor(next, world),
+      next?.teaches ?? "",
+      next?.at,
+    );
   }
 
   // Names the next entity and hands it its own sentence. Once all four are

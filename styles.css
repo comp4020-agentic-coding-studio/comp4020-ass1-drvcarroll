@@ -757,58 +757,215 @@ button.ref-chip:focus-visible {
   cursor: pointer;
 }
 
+/* ---- the narrow viewport ----
+   390px is a marked viewport, not a fallback, so this is a layout rather than a
+   set of apologies. Three things change and everything else follows from them:
+   the two 15vw gutters go, so the picture takes the full width; the
+   instruction, which lived in a gutter, becomes a bar across the top of the
+   screen; and every size steps down one notch so four panels still divide one
+   viewport with their contents legible inside it.
+
+   Touch targets do not step down with the rest. 44px is the floor whatever the
+   width, so the buttons get narrower and lighter here, never shorter. */
 @media (width <= 700px) {
-  .file-list {
-    flex-basis: 9rem;
+  /* The bottom padding is Undo's strip. It is fixed to the corner, so without
+     a reserved band it sits on top of the file list rather than beside it. */
+  .screen {
+    padding: 0.6rem 0.6rem 3.4rem;
+    gap: 0.5rem;
   }
 
-  /* No gutter at this width, so the instruction sits inside the panel it points
-     at rather than becoming a column one word wide. Script appends it last, so
-     order pulls it up under the title where it is read before the contents it
-     is talking about. */
-  .panel-head {
-    order: -2;
+  /* The gutters were the whole reason for 70vw, and at this width they hold
+     nothing: the hint is a bar above and the note is a sheet below. */
+  .stage {
+    width: 100%;
+    gap: 0.3rem;
   }
 
+  /* A bar across the top of the screen, above the picture rather than inside
+     one panel of it - script puts it first in .screen at this width. The
+     accent border on the panel it names is what points; this says the words. */
   .hint {
     position: static;
-    order: -1;
-    width: auto;
-    margin-block-end: 0.6rem;
-    padding: 0.5rem 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.6rem;
+    align-items: baseline;
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--line);
+    border-inline-start: 3px solid var(--accent);
     border-radius: 0.4rem;
     background: var(--inset);
     text-align: start;
     transform: none;
   }
 
-  /* The teammates come inside the border too, stacked in the corner opposite
-     the title rather than spread across a gutter that no longer exists. */
-  .actor {
-    inset-inline: auto 0.75rem;
-    top: calc(0.6rem + var(--actor-index, 0) * 2rem);
-    display: flex;
+  .hint-do {
+    font-size: 0.82rem;
+    line-height: 1.3;
+  }
+
+  .hint-why {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.3;
+  }
+
+  /* Inside the bar rather than under it, so the tour's one control does not
+     push the picture down a line every time it is on screen. */
+  .go-on {
+    margin-block-start: 0;
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  /* Undo sits bottom-left instead of top-left: the top of the screen is the
+     instruction's now, and the two must not overlap. */
+  .take-back {
+    top: auto;
+    bottom: 0.75rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .start-again {
+    top: auto;
+    bottom: 3.6rem;
+  }
+
+  .panel {
+    padding: 0.5rem 0.6rem;
+    border-radius: 0.45rem;
+  }
+
+  /* Re-cut for a tall, narrow screen. The editor and the history are the two
+     things worth reading here, and the two list panels were holding empty
+     height that Your Files needed. */
+  .panel[data-panel="server"] {
+    flex: 0 1 12vh;
+  }
+
+  .panel[data-panel="git"] {
+    flex: 1 1 20vh;
+  }
+
+  .panel[data-panel="index"] {
+    flex: 0 1 13vh;
+  }
+
+  .panel[data-panel="files"] {
+    flex: 1.5 1 28vh;
+  }
+
+  /* Three verbs and a title do not fit on one 390px line, so the row wraps
+     rather than squeezing the labels past reading. */
+  .panel-head {
+    flex-wrap: wrap;
+    gap: 0.3rem 0.5rem;
+    margin-block-end: 0.4rem;
+  }
+
+  .panel-head h2 {
+    font-size: 0.85rem;
+  }
+
+  .panel-actions {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  /* Narrower and lighter, never shorter: 44px stays the floor. */
+  .panel-action,
+  .verb {
+    padding-inline: 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .panel-action {
+    padding-inline: 0.7rem;
+    font-size: 0.85rem;
+  }
+
+  .panel-body {
     gap: 0.35rem;
+  }
+
+  /* The list keeps enough width for a filename and its glyph and no more, so
+     the editor beside it stays wide enough to read a line of code in. */
+  .file-list {
+    flex-basis: 7.5rem;
+  }
+
+  .file-list li {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.78rem;
+  }
+
+  .files-browser {
+    gap: 0.45rem;
+  }
+
+  .file-editor {
+    padding: 0.4rem;
+    font-size: 0.72rem;
+  }
+
+  .blob-list li,
+  .commit-row {
+    gap: 0.35rem;
+    padding: 0.15rem 0;
+    font-size: 0.72rem;
+  }
+
+  .oid-swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+
+  .ref-chip {
+    padding: 0.05rem 0.4rem;
+    font-size: 0.68rem;
+  }
+
+  .empty,
+  .state {
+    font-size: 0.75rem;
+  }
+
+  .message {
+    font-size: 0.8rem;
+  }
+
+  .arrow {
+    font-size: 1rem;
+  }
+
+  /* The teammates come inside the border, stacked in the corner opposite the
+     title rather than spread across a gutter that no longer exists. */
+  .actor {
+    inset-inline: auto 0.6rem;
+    top: calc(0.5rem + var(--actor-index, 0) * 1.7rem);
+    display: flex;
+    gap: 0.3rem;
     align-items: center;
     width: auto;
   }
 
   .actor svg {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.2rem;
+    height: 1.2rem;
   }
 
-  /* No gutter wide enough for prose at this width, so the note lies over the
-     panel it belongs to rather than becoming a column one word wide. */
+  .actor-name {
+    font-size: 0.68rem;
+  }
+
+  /* There is no gutter to hang a hover note in, and no hover to open it with on
+     the device this width is for. The tap-opened sheet below replaces it. */
   .desc {
-    inset-inline: 0.6rem;
-    top: auto;
-    bottom: 0.5rem;
-    width: auto;
-    padding: 0.5rem 0.6rem;
-    border-radius: 0.4rem;
-    background: var(--inset);
-    transform: none;
+    display: none;
   }
 
   /* No room to anchor beside anything, so the touch note becomes a sheet. */

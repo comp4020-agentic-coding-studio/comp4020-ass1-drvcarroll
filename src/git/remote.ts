@@ -20,6 +20,15 @@ export function canPush(world: World): boolean {
   return theirs === undefined || isAncestor(world.local.objects, theirs, mine);
 }
 
+// Whether there is anything up there to come down: the server's tip is a
+// commit .git has never seen. Your own push writes its commits into both
+// stores at once, so this can only be true because somebody else pushed -
+// which is the whole of what fetch is for.
+export function canFetch(world: World): boolean {
+  const theirs = headOid(world.remote);
+  return theirs !== undefined && world.local.objects[theirs] === undefined;
+}
+
 export function push(world: World): World {
   const head = world.local.head;
   if (head.kind !== "branch" || !canPush(world)) return world;
@@ -107,7 +116,7 @@ export function teammatePushes(
   };
 }
 
-// Exported because the page needs it too: Gary appends to whichever file you
+// Exported because the page needs it too: a teammate appends to whichever file
 // just pushed, so it has to read the tree that push landed.
 export function entriesAt(
   repo: World["remote"],
