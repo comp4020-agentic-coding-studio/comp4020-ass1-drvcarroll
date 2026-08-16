@@ -150,10 +150,8 @@ export const RUNS: readonly Run[] = [
         id: "edit",
         say: "Click README.md in the list, then type anything you like into the editor.",
         why:
-          "These are ordinary files on your own disk. Git is not watching " +
-          "them yet: nothing has been recorded, and nothing has left your " +
-          "computer. The letter beside the name is git telling you what it " +
-          "thinks of each file right now.",
+          "Ordinary files on your own disk. Git is not watching them yet: " +
+          "nothing is recorded, and nothing has left your computer.",
         at: "files",
         allow: ["files"],
         done: (c) =>
@@ -163,10 +161,8 @@ export const RUNS: readonly Run[] = [
         id: "save",
         say: "Press Save.",
         why:
-          "Save stages the change. Git copies the file's contents into .git " +
-          "and writes its name and content id into the index. The index is " +
-          "the list of exactly what your next commit will contain, which is " +
-          "why it is a separate place from your files.",
+          "Git copies the contents into .git and writes the name into the " +
+          "index: the list of exactly what your next commit will contain.",
         at: "files",
         allow: ["files", "save"],
         done: (c) =>
@@ -176,10 +172,9 @@ export const RUNS: readonly Run[] = [
         id: "commit",
         say: "Type a short message saying what you changed, then press Commit.",
         why:
-          "A commit seals the index into a snapshot and names it with an id " +
-          "built from its contents and its parent. It is stored in .git, in " +
-          "a folder inside your project, on your machine. This is why you " +
-          "can commit on a plane.",
+          "A commit seals the index into a snapshot, named by an id built " +
+          "from its contents and its parent. It lives in .git, on your " +
+          "machine.",
         at: "index",
         allow: ["files", "save", "commit"],
         done: committed,
@@ -188,9 +183,8 @@ export const RUNS: readonly Run[] = [
         id: "push",
         say: "Press Push.",
         why:
-          "Push is one of only two commands that ever reach the server. It " +
-          "sends the commits the server does not have yet. Everything you " +
-          "have done up to this line happened on your computer alone.",
+          "One of only two commands that ever reach the server. Everything " +
+          "you did before this line happened on your computer alone.",
         at: "git",
         allow: ["push"],
         done: (c) => headOid(c.world.remote) !== headOid(c.entry.remote),
@@ -200,8 +194,7 @@ export const RUNS: readonly Run[] = [
         say: "Someone else works on this project too. Give them a moment.",
         why:
           "The server is a different computer, and other people push to it. " +
-          "That is the whole reason it can hold work your .git has never " +
-          "seen, and the reason the next command exists at all.",
+          "That is why it can hold work your .git has never seen.",
         at: "server",
         allow: [],
         done: (c) => canFetch(c.world),
@@ -210,10 +203,9 @@ export const RUNS: readonly Run[] = [
         id: "pull",
         say: "Press Pull.",
         why:
-          "Pull fetches their commits into your .git and moves the " +
-          "origin/main marker to show where the server is. Look at Your " +
-          "Files: nothing there changed. Fetching brings objects across the " +
-          "gap, it does not touch the files you are editing.",
+          "Their commits come into your .git and origin/main moves. Look at " +
+          "Your Files: nothing there changed, because fetching does not touch " +
+          "what you edit.",
         at: "git",
         allow: ["pull"],
         done: pulled,
@@ -228,10 +220,8 @@ export const RUNS: readonly Run[] = [
         id: "yours",
         say: "Click notes.md, type a change, press Save, then press Commit.",
         why:
-          "You and your teammate have both now moved on from the same " +
-          "starting commit. There are two lines of history in .git, and " +
-          "neither one contains the other. This is what people mean when " +
-          "they say two branches have diverged.",
+          "You and your teammate have both moved on from the same commit. Two " +
+          "lines of history now, and neither one contains the other.",
         at: "files",
         allow: ["files", "save", "commit"],
         done: committed,
@@ -240,10 +230,8 @@ export const RUNS: readonly Run[] = [
         id: "refused",
         say: "Press Push, and read what comes back.",
         why:
-          "Refused. The server holds a commit you do not have, and git will " +
-          "never let a push quietly throw away someone else's work. There " +
-          "is no way round this and there is not meant to be: you bring " +
-          "their work into yours first, and then you push.",
+          "The server holds a commit you do not have, and git will never let " +
+          "a push throw away someone else's work. Bring theirs in first.",
         at: "git",
         allow: ["push"],
         // Refused is what this step is for and what run one guarantees. The
@@ -260,10 +248,9 @@ export const RUNS: readonly Run[] = [
         id: "combine",
         say: "Press Merge origin/main into main.",
         why:
-          "A merge compares three snapshots: the commit you both started " +
-          "from, yours, and theirs. Where only one side changed a file, git " +
-          "takes that change without asking. It only has to ask you when " +
-          "both sides changed the same file.",
+          "A merge compares three snapshots: what you both started from, " +
+          "yours, and theirs. Where only one side changed a file, git takes " +
+          "it.",
         at: "git",
         allow: ["merge"],
         done: (c) => c.world.merging !== undefined || merged(c),
@@ -272,10 +259,8 @@ export const RUNS: readonly Run[] = [
         id: "seal",
         say: "Press Commit to seal the merge.",
         why:
-          "A merge commit has two parents, and that is the entire idea: one " +
-          "commit pointing back at both lines of work. Nothing was " +
-          "overwritten and nothing was lost, and the history says exactly " +
-          "what happened.",
+          "A merge commit has two parents: one commit pointing back at both " +
+          "lines, so nothing was overwritten and nothing was lost.",
         at: "index",
         allow: ["merge", "commit"],
         done: merged,
@@ -285,8 +270,7 @@ export const RUNS: readonly Run[] = [
         say: "Press Push again.",
         why:
           "Accepted this time. Your line now contains theirs, so there is " +
-          "nothing on the server that your push would overwrite. That test " +
-          "is the only thing push was ever refusing on.",
+          "nothing on the server that your push would overwrite.",
         at: "git",
         allow: ["push"],
         done: (c) => headOid(c.world.remote) !== headOid(c.entry.remote),
@@ -302,9 +286,7 @@ export const RUNS: readonly Run[] = [
         say: "Press Branch, type a name for it, then press Start a branch here.",
         why:
           "A branch is a name pointing at a commit. Starting one copies " +
-          "nothing, creates no snapshot and touches no file: it writes a " +
-          "single line into .git. That is why branching in git is instant " +
-          "however large the project is.",
+          "nothing and creates no snapshot: it writes one line into .git.",
         at: "git",
         allow: ["branch"],
         done: (c) => local(c.world).length > local(c.entry).length,
@@ -313,10 +295,8 @@ export const RUNS: readonly Run[] = [
         id: "move",
         say: (c) => `Click the ${newBranch(c)} chip to move onto it.`,
         why:
-          "HEAD is the marker for where you are standing. Checking out " +
-          "moves it to that branch and writes that commit's snapshot back " +
-          "over your files. The dot beside a name is how you tell which one " +
-          "you are on.",
+          "HEAD marks where you are standing. Checking out moves it and " +
+          "writes that commit's snapshot back over your files.",
         at: "git",
         allow: ["checkout"],
         done: (c) =>
@@ -329,8 +309,7 @@ export const RUNS: readonly Run[] = [
         say: "Click main.ts, type a change, press Save, then press Commit.",
         why: (c) =>
           `The commit lands on ${newBranch(c)} and moves only that name. ` +
-          "main has not moved at all. Two names now point at two different " +
-          "commits, which is all a branch has ever been.",
+          "main has not moved at all: two names, two commits.",
         at: "files",
         allow: ["files", "save", "commit"],
         done: committed,
@@ -339,10 +318,8 @@ export const RUNS: readonly Run[] = [
         id: "back",
         say: "Click the main chip to go back to main.",
         why:
-          "Your files change back to what main says. The commit you just " +
-          "made is still in .git, exactly where you left it, waiting for " +
-          "the name that points at it. Moving between branches never " +
-          "deletes anything.",
+          "Your files change back to what main says. Your branch's commit is " +
+          "still in .git, exactly where you left it.",
         at: "git",
         allow: ["checkout"],
         // Standing on main, having not been standing on main when this step
@@ -360,9 +337,8 @@ export const RUNS: readonly Run[] = [
         id: "diverge",
         say: "Click styles.css, type a change, press Save, then press Commit.",
         why:
-          "Now both lines have moved since they split apart. This is the " +
-          "same shape as run two, with one difference that turns out not to " +
-          "be a difference at all: this time both lines are yours.",
+          "Both lines have moved since they split. The same shape as run two, " +
+          "except this time both lines are yours.",
         at: "files",
         allow: ["files", "save", "commit"],
         done: committed,
@@ -371,9 +347,8 @@ export const RUNS: readonly Run[] = [
         id: "combine",
         say: (c) => `Press Merge ${newBranch(c)} into main.`,
         why:
-          "The same three-snapshot comparison as before: what the two " +
-          "branches last agreed on, what main did, what your branch did. " +
-          "Git does not care in the slightest that both sides were you.",
+          "The same three-snapshot comparison: what the two branches last " +
+          "agreed on, what main did, what your branch did.",
         at: "git",
         allow: ["merge"],
         done: (c) => c.world.merging !== undefined || merged(c),
@@ -382,9 +357,8 @@ export const RUNS: readonly Run[] = [
         id: "seal",
         say: "Press Commit.",
         why:
-          "One commit, two parents, both lines kept. That is a merge, " +
-          "whether the other side was a teammate on another machine or you " +
-          "on another branch. There was only ever one mechanism here.",
+          "One commit, two parents, both lines kept. A merge is the same " +
+          "mechanism whether the other side was a teammate or you.",
         at: "index",
         allow: ["merge", "commit"],
         done: merged,

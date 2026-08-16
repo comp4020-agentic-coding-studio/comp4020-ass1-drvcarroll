@@ -86,10 +86,14 @@ describe("every step explains, not just instructs", () => {
     }
   });
 
-  it("explains why, at length, on every single step", () => {
+  // Both ends are pinned. Too short and the step has told the visitor what to
+  // press and taught them nothing; too long and it overflows the gutter it is
+  // drawn in at 1920 and the bar it is drawn in at 390. One tight claim each.
+  it("explains why on every single step, in one tight claim", () => {
     for (const step of steps()) {
       const why = whyFor(step, ctx(world));
-      expect(why.length).toBeGreaterThan(120);
+      expect(why.length, `${step.id} explains too little`).toBeGreaterThan(80);
+      expect(why.length, `${step.id} will overflow`).toBeLessThan(150);
     }
   });
 

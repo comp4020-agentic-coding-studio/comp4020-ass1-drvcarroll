@@ -226,7 +226,8 @@ const walkALap = (): void => {
       // Both halves are on screen: what to do, and why it is worth doing.
       expect(hint(), place).not.toBe("");
       expect(why(), place).not.toBe("");
-      expect(why().length, place).toBeGreaterThan(120);
+      expect(why().length, place).toBeGreaterThan(80);
+      expect(why().length, place).toBeLessThan(150);
 
       const action = ACTIONS[`${run.id}/${step.id}`];
       if (action === undefined) throw new Error(`no action for ${place}`);
@@ -723,7 +724,7 @@ describe("on a phone", () => {
   it("still says where you are, what to do, and why", () => {
     expect(where()).toContain("Run 1 of 3");
     expect(hint()).not.toBe("");
-    expect(why().length).toBeGreaterThan(120);
+    expect(why().length).toBeGreaterThan(80);
   });
 
   // A phone that can only read the picture is not the same artefact. The whole
