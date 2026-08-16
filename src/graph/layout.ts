@@ -31,6 +31,8 @@ export interface SceneNode {
   glyph?: string;
   // What a closed frame is holding, so folding it away costs no information.
   badge?: string;
+  // Said inside an open frame that has nothing in it yet.
+  empty?: string;
   hue?: number;
   box: Box;
   // The touch target, which is the drawn box grown to at least 44px. Separate
@@ -192,19 +194,32 @@ export const FRAME_IDS = Object.keys(FRAMES);
 function badgeFor(world: World, id: string): string {
   const count = (n: number, one: string): string =>
     `${String(n)} ${n === 1 ? one : `${one}s`}`;
+  const commitsIn = (repo: World["local"]): number => {
+    const head = headOid(repo);
+    return head === undefined ? 0 : ancestry(repo.objects, head).length;
+  };
   if (id === "files") return count(Object.keys(world.working).length, "file");
-  if (id === "index") return count(Object.keys(world.index).length, "staged");
-  const repo = id === "server" ? world.remote : world.local;
-  const head = headOid(repo);
-  const commits = head === undefined ? 0 : ancestry(repo.objects, head).length;
-  return count(commits, "commit");
+  // "staged" is not a noun, so it does not take the plural s.
+  if (id === "index") return `${String(Object.keys(world.index).length)} staged`;
+  if (id === "server") return count(commitsIn(world.remote), "commit");
+  if (id === "git") return count(commitsIn(world.local), "commit");
+  // The laptop is a machine, not a store, so it says what the machine holds.
+  return `${count(Object.keys(world.working).length, "file")}, ${count(
+    commitsIn(world.local),
+    "commit",
+  )}`;
 }
 
 interface Placed {
   nodes: SceneNode[];
   links: Link[];
   height: number;
+  // A compartment with nothing in it says so, in one muted line, and stays
+  // short. An empty rectangle the size of a full one is wasted surface.
+  empty?: string;
 }
+
+const EMPTY_ROW = 34;
 
 // A frame either shows its icon or its contents. Both cases return a height,
 // so the stack above and below simply moves.
@@ -223,7 +238,7 @@ function placeFrame(
     y: at.y + m.frameHead,
     w: at.w - m.pad * 2,
   };
-  const body = isOpen
+  const body: Placed = isOpen
     ? fill(inner)
     : { nodes: [], links: [], height: m.icon.h };
 
@@ -238,6 +253,7 @@ function placeFrame(
     open: isOpen,
     dotted: frame.dotted,
     badge: badgeFor(world, frame.id),
+    empty: isOpen ? body.empty : undefined,
     box: isOpen
       ? box
       : // Closed, the frame *is* its icon, centred where the bar would be.
@@ -263,6 +279,9 @@ function placeFiles(
   m: Metrics,
 ): Placed {
   const files = status(world).filter((s) => s.path in world.working);
+  if (files.length === 0) {
+    return { nodes: [], links: [], height: EMPTY_ROW, empty: "no files yet" };
+  }
   const boxes = grid(files.length, content, m.file, 12);
   return {
     nodes: files.map((s, i) =>
@@ -289,6 +308,14 @@ function placeIndex(
     a.localeCompare(b),
   );
   const item = { w: m.blob, h: m.blob };
+  if (entries.length === 0) {
+    return {
+      nodes: [],
+      links: [],
+      height: EMPTY_ROW,
+      empty: "nothing staged",
+    };
+  }
   const boxes = grid(entries.length, content, item, 12);
   return {
     nodes: entries.map(([path, oid], i) =>
@@ -320,6 +347,14 @@ function placeCommits(
   const head = headOid(repo);
   const chain =
     head === undefined ? [] : [...ancestry(repo.objects, head)].reverse();
+  if (chain.length === 0) {
+    return {
+      nodes: [],
+      links: [],
+      height: EMPTY_ROW,
+      empty: repoOf === "local" ? "no commits yet" : "nothing pushed yet",
+    };
+  }
   const nodes: SceneNode[] = [];
   const links: Link[] = [];
   const chipRow = content.y;
@@ -476,10 +511,22 @@ export function layout(
   links.push({ from: "laptop", to: "server", kind: "network" });
 
   const height = Math.round(cursor + m.bottom);
+
+  // Crop to what is actually drawn. Two icons in a 1000-wide box render tiny
+  // with the rest empty, and empty is as much a failure as cluttered. Nothing
+  // moves; the window onto it just tightens, so the canvas visibly grows as
+  // entities open.
+  const left = Math.min(...nodes.map((n) => Math.min(n.box.x, n.hit.x)));
+  const right = Math.max(
+    ...nodes.map((n) => Math.max(n.box.x + n.box.w, n.hit.x + n.hit.w)),
+  );
+  const x = Math.round(Math.max(0, left - m.pad));
+  const w = Math.round(Math.min(m.width - x, right - x + m.pad));
+
   return {
     nodes,
     links,
-    viewBox: `0 0 ${String(m.width)} ${String(height)}`,
+    viewBox: `${String(x)} 0 ${String(w)} ${String(height)}`,
   };
 }
 

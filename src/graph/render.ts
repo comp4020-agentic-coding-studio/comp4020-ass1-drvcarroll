@@ -101,6 +101,14 @@ export function createGraph(
 
   const boxOf = (id: string): Box | undefined => byId.get(id)?.box;
 
+  // Above the object it happened to, pulled back inside the drawing if that
+  // would put it off the edge. Feedback that scrolls away is not feedback.
+  function notePlacement(box: Box): string {
+    const [x0 = 0, , w = 1000] = scene.viewBox.split(/\s+/).map(Number);
+    const x = Math.min(Math.max(box.x + 4, x0 + 60), x0 + w - 60);
+    return `translate(${String(x)} ${String(Math.max(box.y - 8, 12))})`;
+  }
+
   // The inspector is HTML over the SVG rather than a foreignObject: it holds
   // editable text, and foreignObject is not dependable enough to put the phone
   // viewport on. CSS decides between anchored panel and bottom sheet.
@@ -232,20 +240,23 @@ export function createGraph(
 
     if (node.kind === "frame" && node.open === true) {
       add("frame-title", box.x + 14, box.y + 18, node.title);
+      if (node.empty !== undefined) add("empty", c.x, c.y + 12, node.empty);
       return out;
     }
     if (node.kind === "frame") {
       // Closed, the icon carries the identity and the badge carries what is
       // inside, so folding an entity away costs no information.
-      const scale = Math.min(box.w, box.h - 30) / ICON_GRID;
+      // Icon, name, then what is inside it - all within the frame's own box,
+      // so a closed entity never writes on its own border.
+      const scale = Math.min(box.w - 24, box.h - 44) / ICON_GRID;
       const glyph = el("path", {
         class: "icon",
         d: ICONS[node.icon ?? "cylinder"],
-        transform: `translate(${String(c.x - (ICON_GRID * scale) / 2)} ${String(box.y + 2)}) scale(${String(scale)})`,
+        transform: `translate(${String(c.x - (ICON_GRID * scale) / 2)} ${String(box.y + 6)}) scale(${String(scale)})`,
       });
       out.push(glyph);
-      add("icon-title", c.x, box.y + box.h - 12, node.title);
-      add("icon-badge", c.x, box.y + box.h + 2, node.badge ?? "");
+      add("icon-title", c.x, box.y + box.h - 20, node.title);
+      add("icon-badge", c.x, box.y + box.h - 6, node.badge ?? "");
       return out;
     }
     if (node.kind === "file") {
@@ -306,6 +317,9 @@ export function createGraph(
     if (group === undefined) return;
     group.setAttribute("aria-label", describe(node));
     group.setAttribute("data-kind", node.kind);
+    if (node.glyph !== undefined && node.kind === "file") {
+      group.setAttribute("data-glyph", node.glyph);
+    }
     if (node.kind === "frame") {
       group.setAttribute("aria-expanded", String(node.open === true));
     }
@@ -394,9 +408,7 @@ export function createGraph(
     placeLinks();
     for (const [id, note] of notes) {
       const box = boxOf(id);
-      if (box !== undefined) {
-        note.setAttribute("transform", `translate(${String(box.x + box.w)} ${String(box.y)})`);
-      }
+      if (box !== undefined) note.setAttribute("transform", notePlacement(box));
     }
     anchor();
   }
@@ -455,9 +467,9 @@ export function createGraph(
 
       const group = el("g", {
         class: "note",
-        transform: `translate(${String(box.x + box.w)} ${String(box.y)})`,
+        transform: notePlacement(box),
       });
-      const label = el("text", { class: "note-text", x: "8", y: "0" });
+      const label = el("text", { class: "note-text", x: "0", y: "0" });
       label.textContent = text;
       group.append(label);
       noteLayer.append(group);

@@ -46,13 +46,15 @@ describe.each(VIEWPORTS)("the picture at %s", (name) => {
     "keeps everything inside the viewBox, combination %i",
     (_i, open) => {
       const scene = layout(busyWorld(), open, name);
-      const [, , w = 0, h = 0] = scene.viewBox.split(/\s+/).map(Number);
+      const [x0 = 0, y0 = 0, w = 0, h = 0] = scene.viewBox
+        .split(/\s+/)
+        .map(Number);
       for (const node of scene.nodes) {
         expect(
-          node.box.x >= 0 &&
-            node.box.y >= 0 &&
-            node.box.x + node.box.w <= w &&
-            node.box.y + node.box.h <= h,
+          node.box.x >= x0 &&
+            node.box.y >= y0 &&
+            node.box.x + node.box.w <= x0 + w &&
+            node.box.y + node.box.h <= y0 + h,
           `${node.id} is drawn outside the viewBox`,
         ).toBe(true);
       }
@@ -133,7 +135,27 @@ describe.each(VIEWPORTS)("the picture at %s", (name) => {
 
   it("still says what a closed entity is holding", () => {
     const scene = layout(busyWorld(), new Set(), name);
-    expect(find(scene.nodes, "laptop")?.badge).toBe("2 commits");
+    expect(
+      find(scene.nodes, "laptop")?.badge,
+      "Folding a machine away must not fold away what is in it.",
+    ).toBe("3 files, 2 commits");
+    expect(find(scene.nodes, "server")?.badge).toBe("0 commits");
+  });
+
+  it("crops to what is drawn, so two icons are not lost in a wide box", () => {
+    const width = (open: Set<string>): number =>
+      Number(layout(busyWorld(), open, name).viewBox.split(/\s+/)[2]);
+    expect(width(new Set())).toBeLessThan(width(new Set(FRAME_IDS)));
+  });
+
+  it("says so when an open compartment is empty, and stays short", () => {
+    const open = new Set(["laptop", "git"]);
+    const tall = layout(busyWorld(), open, name);
+    const bare = layout(emptyWorld(), open, name);
+    expect(find(bare.nodes, "git")?.empty).toBe("no commits yet");
+    expect(find(bare.nodes, "git")?.box.h).toBeLessThan(
+      find(tall.nodes, "git")?.box.h ?? 0,
+    );
   });
 });
 

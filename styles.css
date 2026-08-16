@@ -1,16 +1,21 @@
+/* Two computers and one gap between them. The palette is deliberately small:
+   the picture carries the argument, so colour is spent on identity (an oid's
+   hue) and on the one boundary that matters (the network gap). */
+
 :root {
   --ink: #0f1720;
   --muted: #5b6875;
-  --line: #d6dee7;
+  --line: #cfd8e3;
   --bg: #fbfcfd;
   --panel: #fff;
-  --query: #0b5fff;
-  --referral: #b26a00;
-  --answer: #0f8a4f;
-  --cname: #7b3fbf;
-  --deny: #c02a2a;
-  --cached: #0f7d8a;
-  --forged: #c2119b;
+  --laptop: #f1f5fa;
+  --inner: #fff;
+  --remote: #f6f2fb;
+  --accent: #0b5fff;
+  --warn: #b26a00;
+  --new: #0f8a4f;
+  --danger: #c02a2a;
+  --radius: 0.6rem;
 }
 
 * {
@@ -24,18 +29,19 @@
 }
 
 .skip:focus {
-  left: 1rem;
+  position: absolute;
   top: 1rem;
-  z-index: 2;
+  left: 1rem;
+  z-index: 3;
   padding: 0.5rem 0.75rem;
-  background: var(--panel);
   border: 2px solid var(--ink);
   border-radius: 0.25rem;
+  background: var(--panel);
 }
 
 body {
   margin: 0;
-  padding: 2rem 1.25rem 4rem;
+  padding: 2rem 1.25rem 3rem;
   font-family: system-ui, sans-serif;
   line-height: 1.6;
   color: var(--ink);
@@ -43,810 +49,334 @@ body {
 }
 
 main {
-  max-width: 62rem;
+  max-width: 64rem;
   margin: 0 auto;
 }
 
 h1 {
-  font-size: clamp(1.9rem, 5vw, 3rem);
+  margin: 0.25rem 0 0.5rem;
+  font-size: clamp(1.8rem, 5vw, 2.8rem);
   line-height: 1.1;
-  margin: 0.5rem 0 0.75rem;
 }
 
-h2 {
+/* One suggestion of what to do next, one consequence of what just happened.
+   Two lines of prose on this page, ever. */
+.prompt {
+  margin: 0 0 0.75rem;
   font-size: 1.05rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+}
+
+.said {
+  min-height: 1.6em;
+  margin: 0.75rem 0 0;
   color: var(--muted);
+  font-size: 0.95rem;
 }
-
-.lede {
-  font-size: 1.15rem;
-  max-width: 44rem;
-  color: var(--muted);
-}
-
-button {
-  padding: 0.7rem 1.4rem;
-  font: inherit;
-  font-weight: 600;
-  color: #fff;
-  background: var(--ink);
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: var(--query);
-}
-
-/* A press that would do nothing says so rather than doing nothing. */
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  background: var(--muted);
-}
-
-:focus-visible {
-  outline: 3px solid var(--query);
-  outline-offset: 2px;
-}
-
-.hint {
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin: 0.5rem 0 0;
-}
-
-/* Graph */
 
 .stage {
-  position: relative; /* the inspector anchors inside it */
-  margin: 1.5rem 0;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.5rem;
+  position: relative;
 }
 
+/* Width fills the measure, but a short picture must not be magnified to fill
+   it. Capping the height lets preserveAspectRatio centre the drawing instead. */
 .stage svg {
   display: block;
   width: 100%;
   height: auto;
+  max-height: 68vh;
 }
 
-.edge {
+/* ---- the shapes ---- */
+
+.node {
+  cursor: pointer;
+  transition: opacity 200ms ease;
+}
+
+.node:focus {
+  outline: none;
+}
+
+.shape {
+  fill: var(--panel);
   stroke: var(--line);
-  stroke-width: 2;
-  opacity: 1;
-  transition: opacity 0.35s;
+  stroke-width: 1.5;
+  transition: fill 150ms ease;
 }
 
-/* A path you cannot know about yet. */
-.edge[data-hidden="true"] {
-  opacity: 0;
+.shape.frame {
+  fill: var(--inner);
 }
 
-.edge-label {
+/* The laptop is the ground everything on your machine sits on, so it is the
+   only filled surface. Its contents are drawn on top of it, lighter. */
+[data-node="laptop"] .shape {
+  fill: var(--laptop);
+  stroke: #b8c4d2;
+}
+
+[data-node="server"] .shape {
+  fill: var(--remote);
+  stroke: #b09fd0;
+  stroke-dasharray: 7 5;
+}
+
+.node:hover .shape {
+  stroke: var(--accent);
+}
+
+.node:focus-visible .shape {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.shape.commit,
+.shape.blob {
+  fill: hsl(var(--hue, 210) 62% 92%);
+  stroke: hsl(var(--hue, 210) 45% 52%);
+}
+
+.shape.chip {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+
+text {
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.frame-title {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.icon {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--muted);
+}
+
+.icon-title {
+  fill: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
   text-anchor: middle;
-  dominant-baseline: middle;
-  font-family: ui-monospace, monospace;
+}
+
+.empty {
+  fill: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  text-anchor: middle;
+}
+
+.icon-badge {
+  fill: var(--muted);
+  font-size: 12px;
+  text-anchor: middle;
+}
+
+.file-name {
+  fill: var(--ink);
+  font-size: 13px;
+}
+
+/* One letter, and colour says the same thing again, so nothing rests on
+   colour alone. */
+.file-glyph {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-anchor: end;
+}
+
+[data-glyph="A"] .file-glyph {
+  fill: var(--new);
+}
+
+[data-glyph="M"] .file-glyph {
+  fill: var(--warn);
+}
+
+[data-glyph="S"] .file-glyph {
+  fill: var(--accent);
+}
+
+[data-glyph="D"] .file-glyph {
+  fill: var(--danger);
+}
+
+.oid {
+  fill: hsl(var(--hue, 210) 55% 28%);
+  font-family: ui-monospace, "SF Mono", menlo, monospace;
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.chip-name {
+  fill: #fff;
   font-size: 12px;
   font-weight: 600;
-  fill: var(--muted);
+  text-anchor: middle;
 }
 
-/* Growth adds to the graph rather than redrawing it, so what the visitor
-   added arrives visibly. Falls back to an instant jump where the SVG
-   transform property is not animatable. */
-.node {
-  opacity: 1;
-  cursor: pointer;
-  transition:
-    transform 0.5s ease,
-    opacity 0.45s ease;
+/* ---- the links ---- */
+
+.link {
+  stroke: var(--line);
+  stroke-width: 2;
+}
+
+.link[data-kind="pin"] {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* The one boundary anything has to cross. */
+.link[data-kind="network"] {
+  stroke: #a08cc8;
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.link[data-hidden="true"] {
+  display: none;
+}
+
+/* ---- motion ---- */
+
+.flight {
+  fill: var(--accent);
+  transition: cx var(--flight-ms, 250ms) ease-in-out,
+    cy var(--flight-ms, 250ms) ease-in-out;
+}
+
+.flight[data-kind="network"] {
+  fill: #7c5fc0;
 }
 
 .node[data-entering="true"] {
   opacity: 0;
 }
 
-.node-box {
-  fill: var(--panel);
-  stroke: var(--line);
-  stroke-width: 2;
-  transition: stroke 0.2s;
-}
-
-.node-title {
-  text-anchor: middle;
-  font-size: 15px;
+/* Feedback at the object it happened to, not at the bottom of the page. */
+.note-text {
+  fill: var(--accent);
+  font-size: 12px;
   font-weight: 600;
-  fill: var(--ink);
-}
-
-.node-role {
   text-anchor: middle;
-  font-size: 11px;
-  fill: var(--muted);
 }
 
-/* A crowd reads as a crowd: no label, only presence. */
-.node-dot {
-  fill: var(--panel);
-  stroke: var(--line);
-  stroke-width: 2;
-  transition: fill 0.2s;
-}
-
-/* Growth as an affordance on the picture: a target sitting where the thing it
-   adds will appear. */
-.node-ghost {
-  fill: var(--bg);
-  stroke: var(--line);
-  stroke-width: 2;
-  stroke-dasharray: 3 3;
-}
-
-.node:hover .node-ghost {
-  fill: var(--panel);
-  stroke: var(--query);
-  stroke-dasharray: none;
-}
-
-.node-glyph {
-  text-anchor: middle;
-  font-size: 16px;
-  font-weight: 700;
-  fill: var(--muted);
-  pointer-events: none;
-}
-
-.node:hover .node-glyph {
-  fill: var(--query);
-}
-
-/* The machine's own number, on the machine. */
-.node-metric {
-  text-anchor: middle;
-  font-family: ui-monospace, monospace;
-  font-size: 10px;
-  fill: var(--query);
-}
-
-/* Load as shading: 120 style writes a tick beats a packet per query. */
-.edge[data-load] {
-  opacity: calc(0.35 + 0.65 * var(--load, 0));
-  stroke-width: calc(1 + 2 * var(--load, 0));
-}
-
-.edge[data-load="hot"] {
-  stroke: var(--query);
-}
-
-.edge[data-load="over"] {
-  stroke: var(--deny);
-}
-
-.packet-swarm {
-  fill: var(--query);
-  opacity: 0.9;
-  pointer-events: none;
-}
-
-.packet-swarm[data-idle="true"] {
-  opacity: 0;
-}
-
-.packet-swarm[data-flying="true"] {
-  transition:
-    cx 0.6s linear,
-    cy 0.6s linear;
-}
-
-.node[data-state="active"] .node-box {
-  stroke: var(--query);
-}
-
-/* The connection lands: the site is finally reachable. */
-.node[data-state="query"] .node-box {
-  stroke: var(--query);
-  stroke-width: 3;
-}
-
-.node[data-state="referral"] .node-box {
-  stroke: var(--referral);
-}
-
-.node[data-state="answer"] .node-box {
-  stroke: var(--answer);
-  stroke-width: 3;
-}
-
-/* An alias is neither a referral nor an answer: the walk starts over. */
-.node[data-state="cname"] .node-box {
-  stroke: var(--cname);
-}
-
-.node[data-state="nxdomain"] .node-box {
-  stroke: var(--deny);
-}
-
-.node[data-state="nodata"] .node-box {
-  stroke: var(--muted);
-}
-
-/* The conversation, left standing on the graph: who said what, and when.
-   Bottom-aligned in its slot so the box grows upward out of the node. */
-
-/* A long note paints outside its slot rather than being cut in half. */
-.speech {
-  overflow: visible;
-}
-
-.speech-slot {
-  height: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.speech-box {
-  max-width: 100%;
-  padding: 0.3rem 0.5rem;
-  font-family: system-ui, sans-serif;
-  font-size: 0.68rem;
-  line-height: 1.35;
-  text-align: center;
-  color: var(--query);
-  background: var(--panel);
-  border: 1px solid currentcolor;
-  border-radius: 8px;
-}
-
-.speech-box[data-kind="referral"] {
-  color: var(--referral);
-}
-
-.speech-box[data-kind="answer"] {
-  color: var(--answer);
-}
-
-.speech-box[data-kind="cname"] {
-  color: var(--cname);
-}
-
-.speech-box[data-kind="nxdomain"] {
-  color: var(--deny);
-}
-
-.speech-box[data-kind="cached"] {
-  color: var(--cached);
-}
-
-.speech-box[data-kind="nodata"] {
-  color: var(--muted);
-}
-
-.packet {
-  fill: var(--query);
-}
-
-.packet[data-kind="referral"] {
-  fill: var(--referral);
-}
-
-.packet[data-kind="answer"] {
-  fill: var(--answer);
-}
-
-.packet[data-kind="cname"] {
-  fill: var(--cname);
-}
-
-.packet[data-kind="nxdomain"] {
-  fill: var(--deny);
-}
-
-/* A cached step has the resolver at both ends, so the packet sits still. */
-.packet[data-kind="cached"] {
-  fill: var(--cached);
-}
-
-.packet[data-kind="nodata"] {
-  fill: var(--muted);
-}
-
-/* Log */
-
-.log {
-  min-height: 6rem;
-}
-
-.steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.step {
-  padding: 0.5rem 0.75rem;
-  background: var(--panel);
-  border-left: 4px solid var(--query);
-  border-radius: 0 6px 6px 0;
-  font-size: 0.92rem;
-}
-
-/* The transcript is the scrubber, so each row is a seek control. It has to
-   look like a line of a log until it is worth pressing. */
-.step-seek {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  align-items: baseline;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
+.verb {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: #fff;
   font: inherit;
-  color: inherit;
-  text-align: left;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
-.step-seek:disabled {
-  cursor: default;
+.verb + .verb {
+  margin-left: 0.4rem;
 }
 
-/* Not yet reached: the count is the information, not the content. Reading
-   ahead would give away the walk the visitor is here to watch. */
-.step[data-reached="false"] {
-  border-left-color: var(--line);
-  opacity: 0.45;
-}
-
-.step[data-current="true"] {
-  box-shadow: inset 0 0 0 1px var(--line);
-  background: color-mix(in srgb, var(--query) 5%, var(--panel));
-}
-
-.step[data-kind="referral"] {
-  border-left-color: var(--referral);
-}
-
-.step[data-kind="answer"] {
-  border-left-color: var(--answer);
-}
-
-.step[data-kind="cname"] {
-  border-left-color: var(--cname);
-}
-
-.step[data-kind="nxdomain"] {
-  border-left-color: var(--deny);
-}
-
-.step[data-kind="cached"] {
-  border-left-color: var(--cached);
-}
-
-/* NODATA is not a denial of the name, so it does not read as one. */
-.step[data-kind="nodata"] {
-  border-left-color: var(--muted);
-}
-
-.step-label {
-  font-weight: 600;
-  min-width: 8.5rem;
-}
-
-.step[data-reached="false"] .step-label {
-  min-width: 0;
-  font-weight: 400;
+.verb[data-undo] {
+  background: none;
+  border-color: var(--line);
   color: var(--muted);
 }
 
-.step-note {
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
-  color: var(--muted);
+.note {
+  animation: fade-note 2200ms ease forwards;
 }
 
-/* The records the step actually carried. This is where a referral stops
-   being a word and becomes NS records plus the glue that makes them usable. */
-
-.records-scroll {
-  flex: 1 0 100%;
-  min-width: 0;
-  overflow-x: auto;
-  margin: 0.5rem 0 0.15rem;
-}
-
-.records {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: ui-monospace, monospace;
-  font-size: 0.78rem;
-  text-align: left;
-}
-
-.records th {
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.65rem;
-}
-
-.records th,
-.records td {
-  padding: 0.2rem 0.8rem 0.2rem 0;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-  vertical-align: top;
-}
-
-.record-type {
-  font-weight: 700;
-}
-
-.record-ttl {
-  color: var(--muted);
-}
-
-/* What this record is doing in this message — the part a bare table hides. */
-.record-role {
-  font-weight: 600;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-tr[data-role="delegation"] .record-role {
-  color: var(--referral);
-}
-
-tr[data-role="glue"] .record-role {
-  color: var(--query);
-}
-
-tr[data-role="answer"] .record-role {
-  color: var(--answer);
-}
-
-tr[data-role="alias"] .record-role {
-  color: var(--cname);
-}
-
-tr[data-role="denial"] .record-role {
-  color: var(--deny);
-}
-
-tr[data-role="remembered"] .record-role {
-  color: var(--cached);
-}
-
-tr[data-role="empty"] .record-role {
-  color: var(--muted);
-}
-
-/* Said once, where it first matters, then never again in this walk. */
-.record-annotation td {
-  padding: 0.1rem 0 0.6rem;
-  border-bottom: 1px solid var(--line);
-  white-space: normal;
-}
-
-.record-annotation p {
-  margin: 0 0 0.2rem;
-  max-width: 46rem;
-  font-family: system-ui, sans-serif;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.summary {
-  margin-top: 1rem;
-  font-weight: 600;
-}
-
-.cache-empty {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-/* Level 4. A forgery has to look like a message, not like a warning sign —
-   the whole lesson is that the resolver cannot tell. So it gets its own
-   colour and nothing else: same shape, same table, same animation. */
-
-.node[data-state="forged"] .node-box {
-  stroke: var(--forged);
-  stroke-width: 3;
-}
-
-.node[data-state="rejected"] .node-box {
-  stroke: var(--forged);
-  stroke-dasharray: 4 3;
-}
-
-.speech-box[data-kind="forged"] {
-  color: var(--forged);
-}
-
-.speech-box[data-kind="rejected"] {
-  color: var(--muted);
-}
-
-.packet[data-kind="forged"] {
-  fill: var(--forged);
-}
-
-.packet[data-kind="rejected"] {
-  fill: var(--muted);
-}
-
-.step[data-kind="forged"] {
-  border-left-color: var(--forged);
-}
-
-/* Dashed: the packet arrived and went nowhere. */
-.step[data-kind="rejected"] {
-  border-left-color: var(--muted);
-  border-left-style: dashed;
-}
-
-/* The acceptance test, shown on the step that turned on it. */
-.step-txid {
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-tr[data-role="forged"] .record-role {
-  color: var(--forged);
-}
-
-tr[data-role="discarded"] .record-role {
-  color: var(--muted);
-  text-decoration: line-through;
-}
-
-code {
-  font-size: 0.9em;
-  background: #eef2f6;
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #e9eef4;
-    --muted: #95a3b3;
-    --line: #2b3644;
-    --bg: #0d1117;
-    --panel: #151c25;
+@keyframes fade-note {
+  0% {
+    opacity: 0;
   }
 
-  code {
-    background: #1e2732;
+  12%,
+  75% {
+    opacity: 1;
   }
 
-  button {
-    color: #0d1117;
-    background: #e9eef4;
+  100% {
+    opacity: 0;
   }
 }
 
-/* Transport. One button carries the action and the counter, and one slider
-   carries both the pacing and whether it is paced at all — a separate
-   play/pause would be a second control saying the same thing. */
-
-.transport {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.75rem;
-}
-
-.transport [data-next] {
-  font-variant-numeric: tabular-nums;
-}
-
-.transport [data-back] {
-  padding-inline: 0.7rem;
-  font-family: ui-monospace, monospace;
-}
-
-.speed {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.speed input {
-  width: 7rem;
-}
-
-.speed-note {
-  min-width: 11ch;
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
-}
-
-/* A machine is something you can open. */
-
-.node:focus-visible {
-  outline: none;
-}
-
-.node:focus-visible .node-box,
-.node[data-open="true"] .node-box {
-  stroke: var(--query);
-  stroke-width: 3;
-}
-
-/* The packet only exists while a message is actually in flight. */
-.packet[data-flying="false"] {
-  opacity: 0;
-}
-
-/* The inspector. HTML over the SVG rather than a foreignObject, because it
-   holds scrolling tables. Anchored beside its machine where there is room,
-   and a sheet across the stage where there is not. */
+/* ---- the inspector ---- */
 
 .inspector {
   position: absolute;
   z-index: 2;
-  left: var(--anchor-x, 50%);
-  top: var(--anchor-y, 50%);
-  width: min(23rem, 70%);
-  max-height: 60%;
-  overflow-y: auto;
-  transform: translate(-50%, calc(-100% - 2.5rem));
+  width: min(22rem, calc(100vw - 2.5rem));
   padding: 0.75rem 0.9rem 0.9rem;
-  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
+  background: var(--panel);
   box-shadow: 0 8px 28px rgb(15 23 32 / 18%);
-}
-
-.inspector:focus-visible {
-  outline: 2px solid var(--query);
+  transform: translate(-50%, -50%);
+  inset-inline-start: var(--anchor-x, 50%);
+  inset-block-start: var(--anchor-y, 50%);
 }
 
 .inspector header {
   display: flex;
-  align-items: baseline;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  align-items: baseline;
+  justify-content: space-between;
 }
 
 .inspector h3 {
-  flex: 1 1 auto;
   margin: 0;
   font-size: 1rem;
 }
 
-.inspector h4 {
-  margin: 0.75rem 0 0.35rem;
-  font-size: 0.8rem;
-  font-weight: 600;
+/* The one place the piece explains in words: what this thing is, once. */
+.inspector .what {
+  margin: 0.35rem 0 0.6rem;
   color: var(--muted);
-}
-
-.inspector p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .inspector-close {
-  padding: 0 0.4rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   border: 0;
   background: none;
-  font-size: 1.2rem;
-  line-height: 1;
   color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
   cursor: pointer;
 }
 
-/* Knobs, inside the inspector of the thing they change. Borderless and
-   flush-left so a control reads as part of the machine, not as a form. */
-.knob {
-  margin: 0.75rem 0 0;
-  padding: 0;
-  border: 0;
-}
-
-.knob legend {
-  padding: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.knob-note {
-  margin: 0.1rem 0 0.3rem;
-  font-size: 0.75rem;
-}
-
-.knob-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.3rem;
-}
-
-.knob-step {
-  width: 1.6rem;
-  height: 1.6rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
-  font-size: 0.95rem;
-  line-height: 1;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.knob-step:disabled {
-  color: var(--line);
-  cursor: default;
-}
-
-.knob-value {
-  min-width: 5.5rem;
-  font-family: ui-monospace, monospace;
-  font-size: 0.85rem;
-  text-align: center;
-  color: var(--query);
-}
-
-.knob-switch {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 0.4rem;
-  margin-top: 0.3rem;
-  font-size: 0.8rem;
-}
-
-.knob-switch small {
-  grid-column: 2;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-/* No room to sit beside a machine at phone width, so it stops trying. */
 @media (width <= 700px) {
+  /* No room to anchor beside anything, so it becomes a sheet. */
   .inspector {
-    left: 0;
-    top: auto;
-    bottom: 0;
+    position: fixed;
+    inset: auto 0 0;
     width: 100%;
-    max-height: 55%;
+    border-radius: var(--radius) var(--radius) 0 0;
     transform: none;
-    border-radius: 10px 10px 0 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node {
-    transition: none;
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
-}
-
-/* Following one query: the swarm keeps running, quietly. */
-svg[data-spotlight="true"] .node:not([data-state]),
-svg[data-spotlight="true"] .edge:not([data-load="over"]),
-svg[data-spotlight="true"] .packet-swarm {
-  opacity: 0.28;
 }
