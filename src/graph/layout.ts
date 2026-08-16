@@ -357,8 +357,20 @@ function placeCommits(
   }
   const nodes: SceneNode[] = [];
   const links: Link[] = [];
-  const chipRow = content.y;
-  const commitRow = chipRow + m.chip.h + 10;
+  // Several names can point at one commit, and that is exactly the state a
+  // fast-forward leaves behind, so chips stack rather than hide each other.
+  const pinned = new Map<string, string[]>();
+  for (const [name, oid] of Object.entries(repo.refs)) {
+    pinned.set(oid, [...(pinned.get(oid) ?? []), name]);
+  }
+  // HEAD is a pointer like any other, so it is drawn like any other. Which
+  // branch you are on is otherwise invisible, and it decides what commit does.
+  if (repoOf === "local" && head !== undefined) {
+    pinned.set(head, [...(pinned.get(head) ?? []), "HEAD"]);
+  }
+  const deep = Math.max(1, ...[...pinned.values()].map((n) => n.length));
+  const chipStep = m.chip.h + 4;
+  const commitRow = content.y + deep * chipStep + 6;
   const span = Math.max(0, chain.length - 1) * m.pitch;
   const left = content.x + Math.max(0, (content.w - span - m.commit) / 2);
 
@@ -391,32 +403,35 @@ function placeCommits(
   }
 
   const at = new Map(chain.map((c, i) => [c.oid, left + i * m.pitch]));
-  for (const [name, oid] of Object.entries(repo.refs)) {
+  for (const [oid, names] of pinned) {
     const x = at.get(oid);
     if (x === undefined) continue;
-    const id = `${repoOf}:ref:${name}`;
-    nodes.push(
-      node({
-        id,
-        kind: "chip",
-        title: repoOf === "remote" ? `origin/${name}` : name,
-        box: {
-          x: x + m.commit / 2 - m.chip.w / 2,
-          y: chipRow,
-          w: m.chip.w,
-          h: m.chip.h,
-        },
-        parent: repoOf === "local" ? "git" : "server",
-      }),
-    );
-    links.push({ from: id, to: `${repoOf}:commit:${oid}`, kind: "pin" });
+    for (const [row, name] of names.entries()) {
+      const id = `${repoOf}:ref:${name}`;
+      nodes.push(
+        node({
+          id,
+          kind: "chip",
+          title: repoOf === "remote" ? `origin/${name}` : name,
+          box: {
+            x: x + m.commit / 2 - m.chip.w / 2,
+            // Nearest the commit last, so the stack reads downward onto it.
+            y: commitRow - 6 - (names.length - row) * chipStep,
+            w: m.chip.w,
+            h: m.chip.h,
+          },
+          parent: repoOf === "local" ? "git" : "server",
+        }),
+      );
+      links.push({ from: id, to: `${repoOf}:commit:${oid}`, kind: "pin" });
+    }
   }
 
-  // Room for the oid line printed under each commit.
+  // Room for the chip stack, and for the oid line printed under each commit.
   return {
     nodes,
     links,
-    height: m.chip.h + 10 + m.commit + 16,
+    height: deep * chipStep + 6 + m.commit + 16,
   };
 }
 

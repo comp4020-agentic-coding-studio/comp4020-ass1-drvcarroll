@@ -16,6 +16,11 @@ export interface Stage {
   met(world: World, start: World): boolean;
 }
 
+// Branches you made, not the remote-tracking names fetch writes for you.
+function local(world: World): string[] {
+  return Object.keys(world.local.refs).filter((n) => !n.startsWith("origin/"));
+}
+
 function commits(world: World): number {
   return Object.values(world.local.objects).filter((o) => o.kind === "commit")
     .length;
@@ -46,6 +51,25 @@ export const STAGES: readonly Stage[] = [
     teaches: "Commits chain to a parent, and share the blobs they can.",
     prompt: "Change another file and commit that too. Watch what gets reused.",
     met: (world) => commits(world) >= 2,
+  },
+  {
+    id: "branch",
+    teaches: "A branch is a pointer, not a copy.",
+    prompt: "Open the main chip. A branch is just a name for a commit.",
+    met: (world) => local(world).length >= 2,
+  },
+  {
+    id: "checkout",
+    teaches: "Checking out is what puts different files on your disk.",
+    prompt: "Check out your new branch and commit something on it.",
+    met: (world) =>
+      world.local.head.kind === "branch" && world.local.head.name !== "main",
+  },
+  {
+    id: "push",
+    teaches: "The server is a different computer, and push is the only way up.",
+    prompt: "Nothing has left your machine yet. Open the server and push.",
+    met: (world) => headOid(world.remote) !== undefined,
   },
 ];
 

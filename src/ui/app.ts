@@ -12,6 +12,8 @@ import {
   stage,
   unstage,
 } from "../git/repo.js";
+import { branch, canFastForward, checkout, merge, resetBack } from "../git/branch.js";
+import { canPush, fetch, push } from "../git/remote.js";
 import { isClean, statusFor } from "../git/status.js";
 import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
@@ -52,6 +54,14 @@ const ORIENT: readonly (readonly [string, string])[] = [
 const FILE_IS =
   "A file on your disk. Change it and git notices, but does nothing " +
   "about it until you say so.";
+
+const HEAD_IS =
+  "Where you are. HEAD names the branch you are on, and that is the branch " +
+  "your next commit moves.";
+
+const REF_IS =
+  "A branch is a name pointing at one commit. Committing moves the name " +
+  "forward; nothing is ever copied, which is why branching is instant.";
 
 const BLOB_IS =
   "The content of a file, named by a hash of that content. It is already " +
@@ -247,6 +257,94 @@ export function start(): void {
     );
   }
 
+  // A ref chip. Everything offered here is a pointer move, which is the whole
+  // reason a branch is worth teaching before a merge is.
+  function inspectRef(name: string, body: HTMLElement): void {
+    if (name === "HEAD") {
+      body.append(line(HEAD_IS, "what"));
+      return;
+    }
+    body.append(line(REF_IS, "what"));
+    const head = world.local.head;
+    const onIt = head.kind === "branch" && head.name === name;
+
+    if (onIt) {
+      const named = document.createElement("input");
+      named.type = "text";
+      named.className = "message";
+      named.placeholder = "new branch name";
+      named.setAttribute("aria-label", "New branch name");
+      body.append(named);
+      body.append(
+        verb("Start a branch here", () => {
+          const to = named.value.trim() || "feature";
+          act(branch(world, to), `local:ref:${to}`, `Started ${to} here.`);
+        }),
+      );
+      for (const other of Object.keys(world.local.refs)) {
+        if (!canFastForward(world, other)) continue;
+        body.append(
+          verb(`Merge ${other} into this`, () => {
+            act(
+              merge(world, other),
+              `local:ref:${name}`,
+              `Nothing to merge: ${name} just moved forward to ${other}.`,
+            );
+          }),
+        );
+      }
+      if (headOid(world.local) !== undefined) {
+        body.append(
+          verb(
+            "Move the branch back",
+            () => {
+              act(
+                resetBack(world),
+                `local:ref:${name}`,
+                `Moved ${name} back. The commit is still in .git.`,
+              );
+            },
+            true,
+          ),
+        );
+      }
+      return;
+    }
+
+    body.append(
+      verb("Check out this branch", () => {
+        const next = checkout(world, name);
+        if (next === world) {
+          say("Not while you have unsaved changes. Commit or discard first.");
+          return;
+        }
+        act(next, `local:ref:${name}`, `On ${name}. Your files changed to match.`);
+      }),
+    );
+  }
+
+  // The other machine. Only two verbs reach it, and they are the only two in
+  // the whole piece that cross the gap.
+  function inspectServer(body: HTMLElement): void {
+    if (canPush(world)) {
+      body.append(
+        verb("Push to the server", () => {
+          const next = push(world);
+          graph.sendObject("git", "server", "network");
+          act(next, "server", "Pushed. The server now has the same commits.");
+        }),
+      );
+    }
+    if (headOid(world.remote) !== undefined) {
+      body.append(
+        verb("Fetch from the server", () => {
+          graph.sendObject("server", "git", "network");
+          act(fetch(world), "git", "Fetched. Your files have not changed.");
+        }),
+      );
+    }
+  }
+
   // What this thing is, then what can be done to it. Every verb in the piece
   // lives here rather than in a toolbar, which is what keeps the page from
   // becoming a cockpit as the vocabulary grows.
@@ -260,10 +358,27 @@ export function start(): void {
     } else if (id.startsWith("blob:")) {
       title = id.slice(5);
       inspectBlob(title, body);
+    } else if (id.startsWith("local:ref:")) {
+      title = id.slice(10);
+      inspectRef(title, body);
     } else {
       const what = WHAT[id];
       if (what !== undefined) body.append(line(what, "what"));
       if (id === "index") inspectIndex(body);
+      if (id === "server") inspectServer(body);
+      if (id === "laptop") {
+        body.append(
+          verb(
+            "Start over",
+            () => {
+              world = start_;
+              open.clear();
+              act(world, "laptop", "Back to the beginning.");
+            },
+            true,
+          ),
+        );
+      }
       if (id in WHAT) {
         body.append(
           verb("Fold this away", () => {
