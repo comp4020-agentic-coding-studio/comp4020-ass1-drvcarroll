@@ -120,7 +120,10 @@ something building can clear.
 ## Revision pass: the interface, after the model was right
 
 Steps 1–19 built a correct model and drew it. Looking at the result, the
-interface is the weakest part of the piece: entities vanish when they open, the
+interface is the weakest part of the piece. The prompt that asked for this pass,
+and the full instructions derived from it, are in
+[`PLAN-UI-REVISION.md`](./PLAN-UI-REVISION.md); the steps below are the
+checklist. Entities vanish when they open, the
 palette is a default light theme rather than a considered one, the two prose
 lines sit far from the picture, and the hint says what to do without pointing at
 what to do it to. These steps are the correction, and each ends with the same
