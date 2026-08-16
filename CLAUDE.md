@@ -223,6 +223,22 @@ A step is not finished when the code works. It is finished when it has been
 checked, looked at, committed, and reviewed against both the spec and the
 principles.
 
+### Run the plan to the end without stopping to report
+
+Once the plan is agreed, work it start to finish in one go. Do not stop between
+steps to summarise, ask whether to continue, or announce what is next. The
+review gate above is done silently, and the commit message is the report: a
+legible commit trail is the process evidence, and a running commentary is not.
+
+- **Do not hand back at a step boundary.** The only reasons to stop are the plan
+  being complete, a genuine blocker that no assumption can get past, or
+  something outside this machine that only the user can do. Name that one thing,
+  keep working on everything it does not block, and never stop on it twice.
+- **Re-aligning is a silent edit to `BUILD_PLAN.md`**, not a message. Reordering
+  or cutting steps needs no permission; the plan already says the cut order.
+- **Report once, at the end**: what shipped, what was cut and why, and anything
+  left for the user.
+
 ## Design principle: compress, then condense
 
 Aim for the most information in the least interface. A minimal UI is not one
