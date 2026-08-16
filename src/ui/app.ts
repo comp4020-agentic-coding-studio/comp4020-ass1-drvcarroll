@@ -56,8 +56,8 @@ const WHAT: Record<string, string> = {
 // Opening an entity is not progress, so these are not stages. They are the
 // order the picture has to be unfolded in before a verb has anything to act on.
 const ORIENT: readonly (readonly [string, string])[] = [
-  ["laptop", "Open your laptop."],
-  ["files", "Your work is in one of these. Open your files."],
+  ["laptop", "Open your Local Device."],
+  ["files", "Your work is in one of these. Open Your Files."],
   ["git", "There is a second database in here. Open .git."],
   ["index", "One thing left unopened. Open the index."],
 ];

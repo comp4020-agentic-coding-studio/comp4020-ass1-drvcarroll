@@ -184,10 +184,10 @@ export interface Frame {
 }
 
 const FRAMES: Record<string, Frame> = {
-  server: { id: "server", title: "the git server", icon: "cylinder", dotted: true },
-  laptop: { id: "laptop", title: "your laptop", icon: "laptop" },
+  server: { id: "server", title: "Git Server", icon: "cylinder", dotted: true },
+  laptop: { id: "laptop", title: "Local Device", icon: "laptop" },
   git: { id: "git", title: ".git", icon: "cylinder" },
-  files: { id: "files", title: "your files", icon: "folder" },
+  files: { id: "files", title: "Your Files", icon: "folder" },
   index: { id: "index", title: ".git/index", icon: "checklist" },
 };
 

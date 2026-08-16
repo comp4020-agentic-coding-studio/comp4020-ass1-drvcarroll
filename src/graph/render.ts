@@ -87,7 +87,7 @@ export function createGraph(
   const svg = el("svg", {
     viewBox: scene.viewBox,
     role: "img",
-    "aria-label": "Your laptop, holding your files, the index and .git, with a git server above it across a network gap",
+    "aria-label": "Your Local Device, holding Your Files, the index and .git, with a Git Server above it across a network gap",
   });
 
   // Frames are filled, so they go under the links; a parent line drawn beneath

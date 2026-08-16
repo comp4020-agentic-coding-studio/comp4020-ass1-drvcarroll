@@ -36,7 +36,7 @@ export const STAGES: readonly Stage[] = [
   {
     id: "edit",
     teaches: "Your files are just files on your machine.",
-    prompt: "Open your files and change a line. Watch what git does.",
+    prompt: "Open Your Files and change a line. Watch what git does.",
     met: (world, start) =>
       JSON.stringify(world.working) !== JSON.stringify(start.working),
   },
@@ -74,13 +74,13 @@ export const STAGES: readonly Stage[] = [
   {
     id: "push",
     teaches: "The server is a different computer, and push is the only way up.",
-    prompt: "Nothing has left your machine yet. Open the server and push.",
+    prompt: "Nothing has left your machine yet. Open the Git Server and push.",
     met: (world) => headOid(world.remote) !== undefined,
   },
   {
     id: "diverged",
     teaches: "A push is refused when the server holds work you do not.",
-    prompt: "Let a teammate push from the server, then try to push again.",
+    prompt: "Let a teammate push from the Git Server, then try to push again.",
     met: (world) => {
       const theirs = headOid(world.remote);
       const mine = headOid(world.local);
