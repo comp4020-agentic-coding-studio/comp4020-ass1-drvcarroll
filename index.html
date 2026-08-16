@@ -27,14 +27,45 @@
         <p class="cue" aria-hidden="true">Scroll down</p>
       </section>
 
+      <!--
+        Why this exists before a single git verb does: two beats, each a pair
+        of lines pinned to one viewport while the section scrolls underneath.
+        Read in order regardless of scroll position or motion preference -
+        only their opacity is scroll-linked, never their presence.
+      -->
+      <section class="intro" data-intro>
+        <div class="intro-track">
+          <div class="intro-beat">
+            <p class="intro-line" data-line>Modern codebases are massive.</p>
+            <p class="intro-line" data-line>
+              Too massive for a single engineer.
+            </p>
+          </div>
+          <div class="intro-beat">
+            <p class="intro-line" data-line>
+              Collaborative programming is the backbone of the software
+              industry.
+            </p>
+            <p class="intro-line" data-line>
+              This is how collaborative coding is managed.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section class="screen">
         <!--
-          The page is the picture. Both lines of prose stay in the DOM and out
-          of sight: the suggestion is drawn beside the entity it points at, and
-          feedback lands on the object it happened to. These two carry the same
-          words to a screen reader, which is the only place they are read.
+          The walkthrough. Script moves this into whichever entity it currently
+          points at, so the instruction is read beside the thing it names rather
+          than at the top of the page. Two parts, because a beginner needs both:
+          what to do, and why that is worth doing. Feedback is the other half of
+          the pair and lands on the object it happened to, so .said below stays
+          out of sight as the accessible mirror.
         -->
-        <p data-prompt class="prompt">Open your Local Device.</p>
+        <div data-prompt class="hint" aria-live="polite" hidden>
+          <p data-hint-do class="hint-do"></p>
+          <p data-hint-why class="hint-why"></p>
+        </div>
 
         <div id="stage" data-graph data-testid="interaction" class="stage"></div>
 

@@ -107,7 +107,9 @@ export function teammatePushes(
   };
 }
 
-function entriesAt(
+// Exported because the page needs it too: Gary appends to whichever file you
+// just pushed, so it has to read the tree that push landed.
+export function entriesAt(
   repo: World["remote"],
   oid: string | undefined,
 ): Readonly<Record<string, string>> {

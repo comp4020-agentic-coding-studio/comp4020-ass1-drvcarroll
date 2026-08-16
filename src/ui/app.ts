@@ -1,12 +1,18 @@
 // Wires the model to the picture. Everything the visitor does goes through
 // apply(): one world in, one world out, one redraw. There is no other path, so
 // the drawing cannot disagree with the model.
+//
+// The picture is four permanently-open panels, stacked in the order a change
+// travels: Your Files, .git/index, .git, and the Git Server, with an arrow
+// between each pair. Nothing here toggles open or closed any more, and nothing
+// lives behind a popup on a pointer that can hover - the one sentence each
+// panel earns is drawn beside it, shown on hover, and on touch by a tap that
+// opens a small dismissible note instead.
 
 import type { World } from "../git/repo.js";
-import { readCommit } from "../git/objects.js";
+import { ancestry } from "../git/objects.js";
 import {
   commitIndex,
-  discard,
   edit,
   emptyWorld,
   headOid,
@@ -17,110 +23,103 @@ import {
   branch,
   canFastForward,
   checkout,
+  isAncestor,
   merge,
   resetBack,
   resetTo,
 } from "../git/branch.js";
-import { canPush, fetch, push, teammatePushes } from "../git/remote.js";
+import {
+  canPush,
+  entriesAt,
+  fetch,
+  push,
+  teammatePushes,
+} from "../git/remote.js";
 import { abortMerge, startMerge } from "../git/merge.js";
 import { canRebase, rebase, unreachable } from "../git/rebase.js";
-import { isClean, status, statusFor } from "../git/status.js";
+import { glyphFor, isClean, status, statusFor } from "../git/status.js";
 import { STASH, pop, stash } from "../git/stash.js";
-import type { Layout } from "../graph/render.js";
-import { createGraph } from "../graph/render.js";
-import type { Graph } from "../graph/render.js";
-import { FRAMES, layout } from "../graph/layout.js";
+import { hueFor } from "../git/hash.js";
+import { durationFor } from "./motion.js";
 import { record, suggested } from "./stages.js";
 
-// One sentence per entity, saying what it is. Naming the components before the
-// process is what makes the process legible. It is said when the entity is
-// opened, so the explanation arrives at the moment it is asked for and then
-// gets out of the way rather than living on screen for good.
+// One sentence per panel, said beside it on hover and read out the moment the
+// visitor's attention (or a screen reader) lands there.
 const WHAT: Record<string, string> = {
-  laptop:
-    "Your computer. Everything below the dotted line is here, on this " +
-    "machine, including the whole history of your project.",
-  server:
-    "Another computer, somewhere else. It holds a copy of the same kind of " +
-    "thing .git holds. Only two commands ever reach it: push and fetch.",
   git:
     ".git is a database of snapshots, and it lives in a folder inside your " +
     "project. This is why you can commit on a plane.",
   files:
-    "The files you actually edit. Git does not touch these until you tell " +
-    "it to, and this is the only place your work exists before you stage it.",
+    "The files you actually edit. Git does not touch these until you stage " +
+    "them, and this is the only place your work exists before then.",
   index:
     "A list of exactly what will go into your next commit. Not a copy of " +
     "your files, just their names and content ids.",
+  server:
+    "Another computer, somewhere else. It holds a copy of the same kind of " +
+    "thing .git holds. Only two commands ever reach it: push and fetch.",
 };
 
-// Opening an entity is not progress, so these are not stages. They are the
-// order the picture has to be unfolded in before a verb has anything to act on.
-const ORIENT: readonly (readonly [string, string])[] = [
-  ["laptop", "Open your Local Device."],
-  ["files", "Your work is in one of these. Open Your Files."],
-  ["git", "There is a second database in here. Open .git."],
-  ["index", "One thing left unopened. Open the index."],
-];
+const PANEL_TITLE: Record<string, string> = {
+  server: "Git Server",
+  git: ".git",
+  index: ".git/index",
+  files: "Your Files",
+};
 
-const FILE_IS =
-  "A file on your disk. Change it and git notices, but does nothing " +
-  "about it until you say so.";
+// Top to bottom, matching the direction a change travels: out of your files,
+// into the index, into .git, and only then across the network gap.
+const PANEL_ORDER = ["server", "git", "index", "files"] as const;
 
-// What the teammate's commit contains. One line, so the conflict it causes is
-// readable in the file rather than something to be taken on trust.
-const TEAMMATE = "# my project\n\nEdited by someone else.\n";
+// What Gary appends. He does not invent a file: he takes whichever one you just
+// pushed and adds a line to it, which is why merging his work is a real merge
+// and why touching that file yourself produces a real conflict.
+const GARY_LINE = "hi, my name is gary!\n";
 
-const HEAD_IS =
-  "Where you are. HEAD names the branch you are on, and that is the branch " +
-  "your next commit moves.";
+// The order the tour introduces the entities, bottom to top: the direction a
+// change actually travels, and the direction the arrows already point.
+const TOUR_ORDER = ["files", "index", "git", "server"] as const;
 
-const REF_IS =
-  "A branch is a name pointing at one commit. Committing moves the name " +
-  "forward; nothing is ever copied, which is why branching is instant.";
-
-const STASH_IS =
-  "Work put aside, as a commit that no branch points at. It is not a special " +
-  "place: getting it back is just reading that snapshot over your files.";
-
-const COMMIT_IS =
-  "A snapshot of every file, named by a hash of its content and its parents. " +
-  "Change any of that and it is a different commit, with a different name.";
-
-const BLOB_IS =
-  "The content of a file, named by a hash of that content. It is already " +
-  "inside .git: staging copied it there, so unstaging loses nothing.";
-
-// The project the visitor arrives to. Two files, so "your files" is a place
-// with things in it before anything is asked of them.
+// Enough files that the list reads like a project rather than a fixture, and
+// enough that it has something to scroll.
 function seed(): World {
   let world = emptyWorld();
   world = edit(world, "README.md", "# my project\n\nA thing I am making.\n");
   world = edit(world, "main.ts", 'console.log("hello");\n');
+  world = edit(world, "styles.css", "body {\n  margin: 0;\n}\n");
+  world = edit(world, "notes.md", "- remember to write tests\n");
+  world = edit(world, "package.json", '{\n  "name": "my-project"\n}\n');
   return world;
 }
 
 export function start(): void {
-  const stage_ = document.querySelector("[data-graph]");
-  if (stage_ === null || !(stage_ instanceof HTMLElement)) return;
+  const stageEl = document.querySelector("[data-graph]");
+  if (stageEl === null || !(stageEl instanceof HTMLElement)) return;
+  const stage_: HTMLElement = stageEl;
   const promptLine = document.querySelector("[data-prompt]");
+  const hintDo = document.querySelector("[data-hint-do]");
+  const hintWhy = document.querySelector("[data-hint-why]");
   const said = document.querySelector("[data-said]");
 
-  // The world the visitor arrived to, kept so "you changed something" can be a
-  // comparison of two states rather than a tally of clicks.
   const start_ = seed();
   let world = start_;
   let met: ReadonlySet<string> = new Set();
-  // Nothing is open at first: two icons and a gap, so the shape of the thing
-  // lands before any git word does.
-  const open = new Set<string>();
+  let selectedFile: string | undefined;
+  let draft = ""; // a half-typed commit message
+  let branchName = ""; // a half-typed new branch name
 
-  const graph: Graph = createGraph(stage_, (name: Layout) =>
-    layout(world, open, name),
-  );
+  // A visitor who has never heard of git meets four entities and five verbs, in
+  // that order, and nothing else until they have used them. "tour" introduces
+  // the entities one at a time; "core" is the whole of collaboration - edit,
+  // save, commit, push, pull, merge; "open" adds branching, stash and rebase
+  // once that loop has closed once and the words mean something.
+  type Phase = "tour" | "core" | "open";
+  let phase: Phase = "tour";
+  let shown = 0; // how many entities the tour has revealed
+  let naming = false; // whether the new-branch field is showing
 
-  // On the picture rather than in the page: every git verb still lives in the
-  // inspector of the object it acts on, and this is not a git verb.
+  stage_.replaceChildren();
+
   const undoButton = document.createElement("button");
   undoButton.type = "button";
   undoButton.className = "verb take-back";
@@ -129,48 +128,381 @@ export function start(): void {
   undoButton.addEventListener("click", () => {
     undo();
   });
-  stage_.append(undoButton);
+  document.body.append(undoButton);
 
-  // Everything the page says beside the picture: the suggestion, and what each
-  // open entity lets you do. HTML rather than SVG for the same reason the
-  // inspector is - it wraps, and its verbs are real buttons.
-  const lane = document.createElement("div");
-  lane.className = "lane";
-  stage_.append(lane);
+  // Start over sits beside Undo rather than inside .git: it belongs to the whole
+  // page, and a verb that resets everything is not a thing .git does.
+  const resetButton = document.createElement("button");
+  resetButton.type = "button";
+  resetButton.className = "verb take-back start-again";
+  resetButton.textContent = "Start over";
+  resetButton.addEventListener("click", () => {
+    forgetGary();
+    act(start_, "files", "Back to the beginning.");
+  });
+  document.body.append(resetButton);
 
-  let hintText = "";
-  let hintAt: string | undefined;
-  let draft = ""; // a half-typed commit message
+  // The tour's one control. It advances nothing in the model - it only names the
+  // next entity - and it is gone the moment the last one has been named. It
+  // lives at the end of the sentence it continues, rather than floating over the
+  // picture: read what this entity is, then ask for the next one.
+  const nextButton = document.createElement("button");
+  nextButton.type = "button";
+  nextButton.className = "verb go-on";
+  nextButton.textContent = "Next";
+  nextButton.addEventListener("click", () => {
+    reveal();
+  });
+  promptLine?.append(nextButton);
+
+  // One panel per entity, in reading order, each holding its own body and its
+  // own hover/tap description - never a shared lane beside the picture.
+  const panels = new Map<string, HTMLElement>();
+  const bodies = new Map<string, HTMLElement>();
+  const actions = new Map<string, HTMLElement>();
+
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+
+  function makePanel(id: string): HTMLElement {
+    const panel = document.createElement("section");
+    panel.className = "panel";
+    panel.dataset["panel"] = id;
+    // Hidden until the tour names it, but still holding its share of the
+    // height: the four divide one viewport, so dropping one out of layout would
+    // shift the other three on every press.
+    panel.dataset["revealed"] = "false";
+    // The entity names itself, and its verbs sit on the opposite end of the
+    // same line: what this is, and what can be done to it, side by side.
+    const head = document.createElement("header");
+    head.className = "panel-head";
+    const heading = document.createElement("h2");
+    heading.textContent = PANEL_TITLE[id] ?? id;
+    const verbs = document.createElement("div");
+    verbs.className = "panel-actions";
+    head.append(heading, verbs);
+    const body = document.createElement("div");
+    body.className = "panel-body";
+    panel.append(head, body);
+    const what = WHAT[id];
+    if (what !== undefined) {
+      if (coarse) {
+        panel.addEventListener("click", (event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button, input, select, textarea, li")) return;
+          showTouchNote(id, what);
+        });
+      } else {
+        const desc = document.createElement("p");
+        desc.className = "desc";
+        desc.textContent = what;
+        panel.append(desc);
+      }
+    }
+    panels.set(id, panel);
+    bodies.set(id, body);
+    actions.set(id, verbs);
+    return panel;
+  }
+
+  let touchNote: HTMLElement | undefined;
+  function closeTouchNote(): void {
+    touchNote?.remove();
+    touchNote = undefined;
+  }
+  function showTouchNote(at: string, text: string): void {
+    closeTouchNote();
+    const note = document.createElement("div");
+    note.className = "inspector touch-note";
+    const header = document.createElement("header");
+    const heading = document.createElement("h3");
+    heading.textContent = PANEL_TITLE[at] ?? at;
+    const shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "inspector-close";
+    shut.setAttribute("aria-label", "Close");
+    shut.textContent = "×";
+    shut.addEventListener("click", () => {
+      closeTouchNote();
+    });
+    header.append(heading, shut);
+    const body = document.createElement("p");
+    body.className = "what";
+    body.textContent = text;
+    note.append(header, body);
+    stage_.append(note);
+    touchNote = note;
+  }
+  stage_.addEventListener("click", (event) => {
+    if (touchNote === undefined) return;
+    if (touchNote.contains(event.target as Node)) return;
+    closeTouchNote();
+  });
+
+  // An arrow describes a relationship between two entities, so it waits for both
+  // of them: during the tour it would otherwise point at something unnamed.
+  const arrows: { el: HTMLElement; from: string; to: string }[] = [];
+
+  for (const [i, id] of PANEL_ORDER.entries()) {
+    stage_.append(makePanel(id));
+    const to = PANEL_ORDER[i + 1];
+    if (to !== undefined) {
+      const arrow = document.createElement("div");
+      arrow.className = "arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.dataset["arrow"] = `${id}:${to}`;
+      arrow.textContent = "↕";
+      arrow.hidden = true;
+      stage_.append(arrow);
+      arrows.push({ el: arrow, from: id, to });
+    }
+  }
+
+  const isRevealed = (id: string): boolean =>
+    panels.get(id)?.dataset["revealed"] === "true";
+
+  function drawArrows(): void {
+    for (const { el, from, to } of arrows) {
+      el.hidden = !isRevealed(from) || !isRevealed(to);
+    }
+  }
+
+  // Gary. The other person in the story, standing outside the server's left
+  // border because he is not part of your machine and never was. He is the
+  // reason push can be refused, and a named figure earns that far better than a
+  // button labelled "a teammate pushes a change" ever did.
+  const gary = document.createElement("div");
+  gary.className = "actor";
+  gary.dataset["actor"] = "gary";
+  gary.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<circle cx="12" cy="8" r="4" />' +
+    '<path d="M4 22a8 8 0 0 1 16 0z" />' +
+    "</svg>";
+  const garyName = document.createElement("p");
+  garyName.className = "actor-name";
+  garyName.textContent = "Gary";
+  gary.append(garyName);
+  panels.get("server")?.append(gary);
+  // Registered as a flight endpoint so a commit can be seen leaving him. The
+  // same map sendObject already reads, rather than a second one beside it.
+  bodies.set("teammate", gary);
+
+  let garyTimer: number | undefined;
+  function forgetGary(): void {
+    if (garyTimer !== undefined) clearTimeout(garyTimer);
+    garyTimer = undefined;
+  }
+
+  // Whichever file your last commit actually changed: Gary adds his line to
+  // that one, so his work lands on top of yours and collides properly if you
+  // touch it again. Nothing invented, nothing special-cased to README.
+  function garyTarget(w: World): { path: string; text: string } | undefined {
+    const head = headOid(w.remote);
+    if (head === undefined) return undefined;
+    const c = w.remote.objects[head];
+    if (c?.kind !== "commit") return undefined;
+    const now = entriesAt(w.remote, head);
+    const before = entriesAt(w.remote, c.parents[0]);
+    const touched = Object.keys(now).filter((p) => now[p] !== before[p]).sort();
+    const path = touched[0] ?? Object.keys(now).sort()[0];
+    if (path === undefined) return undefined;
+    const oid = now[path];
+    const held = oid === undefined ? undefined : w.remote.objects[oid];
+    const text = held?.kind === "blob" ? held.text : "";
+    return { path, text: text + GARY_LINE };
+  }
+
+  // Two seconds after every push of yours, not once: the refusal it causes is
+  // the lesson, and a lesson you meet once is a cutscene.
+  function garyReplies(): void {
+    forgetGary();
+    const wait = durationFor("network") === 0 ? 0 : 2000;
+    garyTimer = window.setTimeout(() => {
+      garyTimer = undefined;
+      const target = garyTarget(world);
+      if (target === undefined) return;
+      gary.dataset["acting"] = "true";
+      setTimeout(() => delete gary.dataset["acting"], durationFor("network"));
+      sendObject("teammate", "server", "network");
+      act(
+        teammatePushes(world, target.path, target.text, "hi from gary"),
+        "server",
+        `Gary pushed a change to ${target.path}. Your next push will be ` +
+          "refused, because the server now holds work you do not.",
+      );
+    }, wait);
+  }
+
+  // .git/index: Commit, in its header, the same corner Files keeps Save in. It
+  // replaces the old stage-then-commit flow's second half entirely - staging
+  // now happens on Save.
+  const commitButton = document.createElement("button");
+  commitButton.type = "button";
+  commitButton.className = "panel-action";
+  commitButton.textContent = "Commit";
+  commitButton.addEventListener("click", () => {
+    if (Object.keys(world.index).length === 0) return;
+    const text = draft.trim() || "a change";
+    draft = "";
+    const next = commitIndex(world, text);
+    sendObject("index", "git", "inside");
+    act(next, "git", `Committed: ${text}.`);
+  });
+  actions.get("index")?.append(commitButton);
+
+  // .git: Push and Pull, in its header. Pull is exactly a fetch.
+  const pullButton = document.createElement("button");
+  pullButton.type = "button";
+  pullButton.className = "panel-action";
+  pullButton.textContent = "Pull";
+  pullButton.addEventListener("click", () => {
+    if (headOid(world.remote) === undefined) return;
+    sendObject("server", "git", "network");
+    act(fetch(world), "git", "Fetched. Your files have not changed.");
+  });
+  const pushButton = document.createElement("button");
+  pushButton.type = "button";
+  pushButton.className = "panel-action";
+  pushButton.textContent = "Push";
+  pushButton.addEventListener("click", () => {
+    if (headOid(world.local) === undefined) return;
+    if (!canPush(world)) {
+      // Two different refusals, and telling a beginner the wrong one teaches
+      // them to pull when there was never anything to pull.
+      const level = headOid(world.remote) === headOid(world.local);
+      act(
+        world,
+        "server",
+        level
+          ? "Nothing to push: the server already has every commit you have."
+          : "Refused: the server has a commit you do not. Pull first.",
+      );
+      return;
+    }
+    sendObject("git", "server", "network");
+    act(push(world), "server", "Pushed. The server has the same commits.");
+    garyReplies();
+  });
+  // .git: Branch, beside Push and Pull, and silent until the collaboration loop
+  // has closed once. One button that asks for a name when pressed, rather than
+  // an input and a verb standing open forever waiting to be needed.
+  const branchButton = document.createElement("button");
+  branchButton.type = "button";
+  branchButton.className = "panel-action";
+  branchButton.textContent = "Branch";
+  branchButton.addEventListener("click", () => {
+    naming = !naming;
+    redraw();
+  });
+  actions.get("git")?.append(pullButton, pushButton, branchButton);
+
+  // Your Files: Save, in its header. Saving is what stages the edit - the one
+  // place the old "stage this change" verb now lives.
+  const saveButton = document.createElement("button");
+  saveButton.type = "button";
+  saveButton.className = "panel-action";
+  saveButton.textContent = "Save";
+  saveButton.addEventListener("click", () => {
+    if (selectedFile === undefined) return;
+    if (isClean(statusFor(world, selectedFile))) return;
+    const next = stage(world, selectedFile);
+    sendObject("files", "index", "inside");
+    act(next, "index", `Staged ${selectedFile}.`);
+  });
+  // The stash pair belongs here rather than in .git, because here is where you
+  // can see it work: your files go clean, and then they come back.
+  const stashButton = document.createElement("button");
+  stashButton.type = "button";
+  stashButton.className = "panel-action";
+  stashButton.textContent = "Put aside";
+  stashButton.addEventListener("click", () => {
+    act(
+      stash(world),
+      "files",
+      "Your work is a commit off to the side. Your files are clean.",
+    );
+  });
+  const popButton = document.createElement("button");
+  popButton.type = "button";
+  popButton.className = "panel-action";
+  popButton.textContent = "Bring it back";
+  popButton.addEventListener("click", () => {
+    act(pop(world), "files", "Your work is back in your files.");
+  });
+  actions.get("files")?.append(stashButton, popButton, saveButton);
+
+  // The list and the editor are built once and then only refreshed. Rebuilding
+  // the textarea on every keystroke is what threw the caret away mid-word.
+  const fileList = document.createElement("ul");
+  fileList.className = "file-list";
+  const editor = document.createElement("textarea");
+  editor.className = "file-editor";
+  editor.dataset["testid"] = "file-editor";
+  editor.addEventListener("input", () => {
+    if (selectedFile === undefined) return;
+    apply(edit(world, selectedFile, editor.value), `edit:${selectedFile}`);
+  });
+  const browser = document.createElement("div");
+  browser.className = "files-browser";
+  browser.append(fileList, editor);
+  bodies.get("files")?.append(browser);
 
   const redraw = (): void => {
-    graph.setScene((name: Layout) => layout(world, open, name));
-    paintLane();
+    renderFiles();
+    renderIndex();
+    renderGit();
+    renderServer();
   };
 
-  // The accessible mirror of what just happened. Feedback itself lands at the
-  // object, inside the picture.
   const say = (text: string): void => {
     if (said !== null) said.textContent = text;
   };
 
-  // Said twice, deliberately: once beside the entity it points at, and once in
-  // the hidden line a screen reader reads.
-  const suggest = (text: string, at?: string): void => {
-    if (promptLine !== null) promptLine.textContent = text;
-    hintText = text;
-    hintAt = at;
-    graph.highlight(at);
-    paintLane();
+  // The walkthrough, in two halves a beginner needs together: what to do next,
+  // and why it is worth doing. Moved into the entity it points at rather than
+  // drawn at the top of the page, so the instruction and the thing it names are
+  // read in one glance.
+  const suggest = (text: string, why: string, at?: string): void => {
+    if (hintDo !== null) hintDo.textContent = text;
+    if (hintWhy !== null) hintWhy.textContent = why;
+    if (promptLine !== null) {
+      promptLine.toggleAttribute("hidden", text === "");
+      const host = at === undefined ? undefined : panels.get(at);
+      if (host !== undefined) host.append(promptLine);
+    }
+    for (const [id, panel] of panels) {
+      if (id === at) panel.setAttribute("data-hint", "true");
+      else panel.removeAttribute("data-hint");
+    }
   };
 
-  // Where the visitor was before the last thing they did. The git verbs each
-  // keep their own reversal, in git's own vocabulary, because that reversal is
-  // a lesson; this is the escape hatch underneath them, and it exists because a
-  // visitor who cannot back out stops poking the model.
+  // A commit rising out of one compartment and into the next: the one piece
+  // of the old picture's motion this rewrite keeps, aimed at real panels.
+  function sendObject(from: string, to: string, kind: "inside" | "network"): void {
+    const a = bodies.get(from);
+    const b = bodies.get(to);
+    if (a === undefined || b === undefined) return;
+    const ms = durationFor(kind);
+    if (ms === 0) return;
+    const stageBox = stage_.getBoundingClientRect();
+    const start_box = a.getBoundingClientRect();
+    const end_box = b.getBoundingClientRect();
+    const dot = document.createElement("div");
+    dot.className = "flight";
+    dot.dataset["kind"] = kind;
+    dot.style.setProperty("--flight-ms", `${String(ms)}ms`);
+    dot.style.left = `${String(start_box.left - stageBox.left + start_box.width / 2)}px`;
+    dot.style.top = `${String(start_box.top - stageBox.top + start_box.height / 2)}px`;
+    stage_.append(dot);
+    requestAnimationFrame(() => {
+      dot.style.left = `${String(end_box.left - stageBox.left + end_box.width / 2)}px`;
+      dot.style.top = `${String(end_box.top - stageBox.top + end_box.height / 2)}px`;
+      setTimeout(() => dot.remove(), ms);
+    });
+  }
+
   interface Moment {
     world: World;
-    open: ReadonlySet<string>;
-    // Consecutive keystrokes in one file are one thing done, not forty.
     mark?: string;
   }
 
@@ -180,7 +512,7 @@ export function start(): void {
   function remember(mark?: string): void {
     const last = history.at(-1);
     if (mark !== undefined && last?.mark === mark) return;
-    history.push({ world, open: new Set(open), mark });
+    history.push({ world, mark });
     if (history.length > DEPTH) history.shift();
     undoButton.disabled = false;
   }
@@ -188,64 +520,52 @@ export function start(): void {
   function undo(): void {
     const last = history.pop();
     if (last === undefined) return;
+    // A rewind must not be overtaken by a push that is already in the air.
+    forgetGary();
     world = last.world;
-    open.clear();
-    for (const id of last.open) open.add(id);
     undoButton.disabled = history.length === 0;
-    graph.closeInspector();
+    advance();
     redraw();
     say("Took that back.");
     nextPrompt();
   }
 
-  // Changes the world and nothing else, so typing into a file can update the
-  // status glyph without the panel being torn out from under the cursor.
+  // Recorded before the redraw, never after: the phase decides which verbs get
+  // drawn, so flipping it afterwards would leave them a whole action behind.
+  // The loop has closed once Gary has diverged the visitor and the visitor has
+  // got back level with him. A fast-forward counts as much as a two-parent
+  // merge: both taught the thing, and pulling Gary's work is usually the former.
+  function settled(): boolean {
+    if (!met.has("diverged")) return false;
+    const theirs = headOid(world.remote);
+    const mine = headOid(world.local);
+    if (theirs === undefined || mine === undefined) return false;
+    return isAncestor(world.local.objects, theirs, mine);
+  }
+
+  function advance(): void {
+    met = record(met, world, start_);
+    if (phase === "core" && settled()) phase = "open";
+  }
+
   function apply(next: World, mark?: string): void {
     remember(mark);
     world = next;
+    advance();
     redraw();
     nextPrompt();
   }
 
-  // A verb: change the world, then say what happened beside the thing it
-  // happened to. The live region is the mirror, not the primary channel.
   function act(next: World, at: string, told: string): void {
     apply(next);
-    graph.closeInspector();
-    graph.annotate(at, told);
     say(told);
   }
 
-  // Opening an entity changes no git state, so it never counts as progress. It
-  // gates access instead: you cannot edit a file before you open your files.
-  function toggle(id: string): void {
-    remember();
-    const wasOpen = open.has(id);
-    if (wasOpen) open.delete(id);
-    else open.add(id);
-    // Folding a machine away folds what is inside it, which is what makes
-    // collapse a way to get the whole model back on one screen.
-    if (id === "laptop" && wasOpen) {
-      for (const inner of ["git", "files", "index"]) open.delete(inner);
-    }
-    graph.closeInspector();
-    redraw();
-    // Opening a thing is when its one sentence is worth hearing. On screen it
-    // arrives in the lane, beside the suggestion that sent the visitor there.
-    const what = WHAT[id];
-    say(wasOpen ? `${id} is folded away.` : (what ?? `${id} is open.`));
-    nextPrompt();
-  }
-
-  function verb(
-    label: string,
-    run: () => void,
-    undo = false,
-  ): HTMLButtonElement {
+  function verb(label: string, run: () => void, undoLike = false): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "verb";
-    if (undo) button.dataset["undo"] = "";
+    if (undoLike) button.dataset["undo"] = "";
     button.textContent = label;
     button.addEventListener("click", run);
     return button;
@@ -258,123 +578,64 @@ export function start(): void {
     return p;
   }
 
-  // A file: what it is, what is in it, what git currently thinks of it, and
-  // the two things you can do about that. Editing writes straight through.
-  function inspectFile(path: string, body: HTMLElement): void {
-    body.append(line(FILE_IS, "what"));
+  // Your Files: a list on the left, the selected file's content editable on
+  // the right. Editing writes straight through; Save is what stages it.
+  function renderFiles(): void {
+    // Stash is an advanced move, and both halves of it only make sense when
+    // there is something to put aside or something waiting to come back.
+    const stashed = world.local.refs[STASH] !== undefined;
+    const dirty =
+      headOid(world.local) !== undefined && !status(world).every(isClean);
+    stashButton.hidden = phase !== "open" || !dirty;
+    popButton.hidden = phase !== "open" || !stashed;
 
-    const text = document.createElement("textarea");
-    text.className = "content";
-    text.value = world.working[path] ?? "";
-    text.setAttribute("aria-label", `Contents of ${path}`);
-    // Everything below the text is rebuilt as you type, and the textarea is
-    // not: the verb you need next has to appear the moment it becomes legal,
-    // but rebuilding the box you are typing into would take the caret with it.
-    const rest = document.createElement("div");
-    const refresh = (): void => {
-      rest.replaceChildren();
-      const state = statusFor(world, path);
-      rest.append(
-        line(
-          state.untracked
-            ? "Git has never seen this file."
-            : state.modified
-              ? "Changed since your last commit."
-              : state.staged
-                ? "Staged, and ready for the next commit."
-                : "Unchanged since your last commit.",
-          "state",
-        ),
-      );
-      if (!isClean(state)) {
-        rest.append(
-          verb("Stage this change", () => {
-            const next = stage(world, path);
-            graph.sendObject(`file:${path}`, "index", "inside");
-            // At the blob it just became, not at the compartment: a note
-            // beside the wrong object reads as being about the wrong object.
-            act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
-          }),
-        );
-      }
-      if (state.modified || state.untracked) {
-        rest.append(
-          verb(
-            "Discard my change",
-            () => {
-              act(
-                discard(world, path),
-                "files",
-                `Discarded your changes to ${path}. That one is gone.`,
-              );
-            },
-            true,
-          ),
-        );
-      }
-    };
-
-    text.addEventListener("input", () => {
-      apply(edit(world, path, text.value), `edit:${path}`);
-      refresh();
-    });
-    body.append(text, rest);
-    refresh();
-  }
-
-  // A blob is already inside .git, which is exactly why unstaging is cheap
-  // enough to be the first reversal the visitor meets.
-  function inspectBlob(oid: string, body: HTMLElement): void {
-    const path = Object.keys(world.index).find((p) => world.index[p] === oid);
-    body.append(line(BLOB_IS, "what"));
-    if (path === undefined) return;
-    body.append(
-      verb(
-        "Unstage this",
-        () => {
-          act(unstage(world, path), "files", `Unstaged ${path}.`);
-        },
-        true,
-      ),
+    const files = status(world).filter((s) => s.path in world.working);
+    if (selectedFile === undefined || !(selectedFile in world.working)) {
+      selectedFile = files[0]?.path;
+    }
+    fileList.replaceChildren();
+    for (const s of files) {
+      const item = document.createElement("li");
+      item.textContent = s.path;
+      const glyph = document.createElement("span");
+      glyph.className = "file-glyph";
+      const g = glyphFor(s);
+      if (g !== "") glyph.dataset["glyph"] = g;
+      glyph.textContent = g;
+      item.append(glyph);
+      item.dataset["testid"] = "file-item";
+      if (s.path === selectedFile) item.setAttribute("aria-current", "true");
+      item.addEventListener("click", () => {
+        selectedFile = s.path;
+        renderFiles();
+      });
+      fileList.append(item);
+    }
+    // Only written when it actually differs, so typing never resets the caret.
+    const text =
+      selectedFile === undefined ? "" : (world.working[selectedFile] ?? "");
+    if (editor.value !== text) editor.value = text;
+    editor.disabled = selectedFile === undefined;
+    editor.setAttribute(
+      "aria-label",
+      selectedFile === undefined ? "No file selected" : `Contents of ${selectedFile}`,
     );
   }
 
-  // A commit says what it is and what it came from. When nothing points at it
-  // any more, it also offers the way back, which is the whole reason a rebase
-  // is safe: the old line is still here.
-  function inspectCommit(oid: string, body: HTMLElement): void {
-    body.append(line(COMMIT_IS, "what"));
-    const c = readCommit(world.local.objects, oid);
-    if (c === undefined) return;
-    const from =
-      c.parents.length === 0
-        ? "The first commit, so it has no parent."
-        : `"${c.message}", on top of ${c.parents.join(" and ")}.`;
-    body.append(line(from, "state"));
-    if (unreachable(world).includes(oid)) {
-      body.append(
-        verb(
-          "Point this branch back here",
-          () => {
-            act(resetTo(world, oid), `local:commit:${oid}`, "Back on the old line. The replayed ones are unreachable now.");
-          },
-          true,
-        ),
-      );
-    }
-  }
-
-  // The index seals into a snapshot, so committing belongs to the index: the
-  // verb stands beside the thing it acts on, not in a toolbar.
-  function indexVerbs(body: HTMLElement): void {
+  // .git/index: what is staged, each with its own unstage, plus the commit
+  // message the fixed Commit button reads from, and merge status/abandon.
+  function renderIndex(): void {
+    const body = bodies.get("index");
+    if (body === undefined) return;
+    body.replaceChildren();
     const merging = world.merging;
     if (merging !== undefined) {
       body.append(
         line(
           merging.conflicts.length === 0
             ? `Merging ${merging.name}. Commit to seal it, with two parents.`
-            : `Merging ${merging.name}. Resolve the conflict, stage it, then ` +
-              "commit. The verbs are the ones you already know.",
+            : `Merging ${merging.name}. Resolve the conflict, save it, then ` +
+              "commit.",
           "state",
         ),
       );
@@ -388,336 +649,304 @@ export function start(): void {
         ),
       );
     }
-    if (Object.keys(world.index).length === 0) return;
+    const entries = Object.entries(world.index).sort(([a], [b]) => a.localeCompare(b));
+    if (entries.length === 0) {
+      body.append(line("Nothing staged.", "empty"));
+      commitButton.disabled = true;
+      return;
+    }
+    commitButton.disabled = false;
+    const list = document.createElement("ul");
+    list.className = "blob-list";
+    for (const [path, oid] of entries) {
+      const item = document.createElement("li");
+      const swatch = document.createElement("span");
+      swatch.className = "oid-swatch";
+      swatch.style.setProperty("--hue", String(hueFor(oid)));
+      const label = document.createElement("span");
+      label.textContent = `${path} (${oid})`;
+      item.append(swatch, label);
+      item.append(
+        verb(
+          "Unstage",
+          () => {
+            act(unstage(world, path), "files", `Unstaged ${path}.`);
+          },
+          true,
+        ),
+      );
+      list.append(item);
+    }
+    body.append(list);
     const message = document.createElement("input");
     message.type = "text";
     message.className = "message";
     message.placeholder = "what this change does";
     message.setAttribute("aria-label", "Commit message");
-    // The lane is rebuilt whenever the world changes, and a half-typed message
-    // is the visitor's work too.
     message.value = draft;
     message.addEventListener("input", () => {
       draft = message.value;
     });
     body.append(message);
-    body.append(
-      verb("Commit these changes", () => {
-        const text = message.value.trim() || "a change";
-        draft = "";
-        const next = commitIndex(world, text);
-        graph.sendObject("index", "git", "inside");
-        act(next, `local:commit:${headOid(next.local) ?? ""}`, `Committed: ${text}.`);
-      }),
-    );
   }
 
-  // A ref chip. Everything offered here is a pointer move, which is the whole
-  // reason a branch is worth teaching before a merge is.
-  function inspectRef(name: string, body: HTMLElement): void {
-    if (name === "HEAD") {
-      body.append(line(HEAD_IS, "what"));
-      return;
-    }
-    // A stash is a name for a commit, so it is a chip. It is not a branch you
-    // can be on, so the only thing it offers is the way back.
-    if (name === STASH) {
-      body.append(line(STASH_IS, "what"));
-      body.append(
-        verb("Get this work back", () => {
-          act(pop(world), "files", "Your work is back in your files.");
-        }),
-      );
-      return;
-    }
-    body.append(line(REF_IS, "what"));
-    const head = world.local.head;
-    const onIt = head.kind === "branch" && head.name === name;
+  // .git: the commit history, newest first, with the branches pointing at
+  // them and the controls that move those pointers around.
+  function renderGit(): void {
+    const body = bodies.get("git");
+    if (body === undefined) return;
+    branchButton.hidden = phase !== "open";
+    body.replaceChildren();
 
-    if (onIt) {
-      const named = document.createElement("input");
-      named.type = "text";
-      named.className = "message";
-      named.placeholder = "new branch name";
-      named.setAttribute("aria-label", "New branch name");
-      body.append(named);
-      body.append(
-        verb("Start a branch here", () => {
-          const to = named.value.trim() || "feature";
-          act(branch(world, to), `local:ref:${to}`, `Started ${to} here.`);
-        }),
-      );
-      for (const other of Object.keys(world.local.refs)) {
-        if (other === name || other === STASH) continue;
-        if (canFastForward(world, other)) {
-          body.append(
-            verb(`Merge ${other} into this`, () => {
-              act(
-                merge(world, other),
-                `local:ref:${name}`,
-                `Nothing to merge: ${name} moved forward to ${other}.`,
-              );
-            }),
-          );
-          continue;
-        }
-        // The other way through a divergence: say your work again on top of
-        // theirs. Offered beside the merge so the choice is the lesson.
-        if (canRebase(world, other)) {
-          body.append(
-            verb(`Replay this onto ${other}`, () => {
-              act(
-                rebase(world, other),
-                `local:ref:${name}`,
-                `Same changes, new hashes. The old ones are still in .git.`,
-              );
-            }),
-          );
-        }
-        // Diverged: a real merge, which may land in a conflicted state. That
-        // state is reached by the same button, because it is the same verb.
-        const next = startMerge(world, other);
-        if (next === world) continue;
-        body.append(
-          verb(`Merge ${other} into this`, () => {
-            const conflicts = next.merging?.conflicts ?? [];
-            act(
-              next,
-              conflicts.length === 0 ? `local:ref:${name}` : `file:${conflicts[0] ?? ""}`,
-              conflicts.length === 0
-                ? `Merged ${other}. Commit it to seal the two parents.`
-                : `${String(conflicts.length)} file both of you changed. Open it.`,
-            );
-          }),
-        );
+    const head = headOid(world.local);
+    const seen = new Set<string>();
+    const commits = head === undefined ? [] : ancestry(world.local.objects, head);
+    for (const c of commits) seen.add(c.oid);
+    const ghosts = Object.values(world.local.objects)
+      .filter((o) => o.kind === "commit" && !seen.has(o.oid))
+      .reverse();
+
+    if (commits.length === 0 && ghosts.length === 0) {
+      body.append(line("No commits yet.", "empty"));
+    } else {
+      const pinned = new Map<string, string[]>();
+      for (const [name, oid] of Object.entries(world.local.refs)) {
+        pinned.set(oid, [...(pinned.get(oid) ?? []), name]);
       }
-      if (headOid(world.local) !== undefined) {
-        body.append(
-          verb(
-            "Move the branch back",
-            () => {
-              act(
-                resetBack(world),
-                `local:ref:${name}`,
-                `Moved ${name} back. The commit is still in .git.`,
-              );
-            },
-            true,
-          ),
-        );
+      if (head !== undefined) pinned.set(head, [...(pinned.get(head) ?? []), "HEAD"]);
+
+      const list = document.createElement("ol");
+      list.className = "commit-list";
+      for (const c of [...commits].reverse()) {
+        list.append(commitRow(c.oid, c.message, c.parents, pinned.get(c.oid), false));
       }
-      return;
+      for (const o of ghosts) {
+        if (o.kind !== "commit") continue;
+        list.append(commitRow(o.oid, o.message, o.parents, pinned.get(o.oid), true));
+      }
+      body.append(list);
     }
 
-    body.append(
-      verb("Check out this branch", () => {
+    body.append(branchControls());
+  }
+
+  function commitRow(
+    oid: string,
+    message: string,
+    parents: readonly string[],
+    refs: string[] | undefined,
+    ghost: boolean,
+  ): HTMLElement {
+    const item = document.createElement("li");
+    item.className = "commit-row";
+    if (ghost) item.dataset["ghost"] = "true";
+    item.dataset["testid"] = "commit";
+    const swatch = document.createElement("span");
+    swatch.className = "oid-swatch";
+    swatch.style.setProperty("--hue", String(hueFor(oid)));
+    const label = document.createElement("span");
+    label.textContent = `${oid} ${message}`;
+    item.append(swatch, label);
+    // The chip is the branch, so the chip is also how you move onto it: one
+    // drawing of a name pinned to a commit, doing the one thing that name can
+    // do. HEAD, the remote-tracking names and the branch you are already on are
+    // labels rather than destinations, so those stay plain text.
+    const on = world.local.head;
+    const current = on.kind === "branch" ? on.name : undefined;
+    for (const name of refs ?? []) {
+      const movable =
+        name !== "HEAD" &&
+        name !== STASH &&
+        name !== current &&
+        !name.startsWith("origin/");
+      if (!movable) {
+        const chip = document.createElement("span");
+        chip.className = "ref-chip";
+        if (name === current) chip.dataset["current"] = "true";
+        chip.textContent = name === current ? `● ${name}` : name;
+        item.append(chip);
+        continue;
+      }
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "ref-chip";
+      chip.textContent = name;
+      chip.setAttribute("aria-label", `Move onto ${name}`);
+      chip.addEventListener("click", () => {
         const next = checkout(world, name);
         if (next === world) {
-          say("Not while you have unsaved changes. Commit them, or put them aside.");
+          say(
+            "Not while you have unsaved changes. Commit them, or put them " +
+              "aside.",
+          );
           return;
         }
-        act(next, `local:ref:${name}`, `On ${name}. Your files changed to match.`);
-      }),
-    );
-  }
-
-  // The other machine. Only two verbs reach it, and they are the only two in
-  // the whole piece that cross the gap.
-  function serverVerbs(body: HTMLElement): void {
-    if (headOid(world.local) !== undefined) {
-      body.append(
-        verb("Push to the server", () => {
-          if (!canPush(world)) {
-            // The refusal is the lesson, so it is explained rather than
-            // prevented: a greyed-out button teaches nothing.
-            act(
-              world,
-              "server",
-              "Refused: the server has a commit you do not. Fetch first.",
-            );
-            return;
-          }
-          graph.sendObject("git", "server", "network");
-          act(push(world), "server", "Pushed. The server has the same commits.");
-        }),
-      );
+        act(next, "git", `On ${name}. Your files changed to match.`);
+      });
+      item.append(chip);
     }
-    body.append(
-      verb("A teammate pushes a change", () => {
-        act(
-          teammatePushes(world, "README.md", TEAMMATE, "their change"),
-          "server",
-          "Someone else pushed while you were working.",
-        );
-      }),
-    );
-    if (headOid(world.remote) !== undefined) {
-      body.append(
-        verb("Fetch from the server", () => {
-          graph.sendObject("server", "git", "network");
-          act(fetch(world), "git", "Fetched. Your files have not changed.");
-        }),
-      );
-    }
-  }
-
-  // What this thing is, then what can be done to it. Every verb in the piece
-  // lives here rather than in a toolbar, which is what keeps the page from
-  // becoming a cockpit as the vocabulary grows.
-  function inspect(id: string): void {
-    const body = document.createElement("div");
-    let title = id;
-
-    if (id.startsWith("file:")) {
-      title = id.slice(5);
-      inspectFile(title, body);
-    } else if (id.startsWith("blob:")) {
-      title = id.slice(5);
-      inspectBlob(title, body);
-    } else if (id.startsWith("local:commit:")) {
-      title = id.slice(13);
-      inspectCommit(title, body);
-    } else if (id.startsWith("local:ref:")) {
-      title = id.slice(10);
-      inspectRef(title, body);
-    } else {
-      return; // an entity is opened and closed, not opened up in a panel
-    }
-    graph.openInspector(id, title, body);
-  }
-
-  // What an open entity lets you do. These used to be a panel that had to be
-  // summoned and then dismissed; they now stand in the lane beside the picture
-  // for exactly as long as the entity is open, which is the same disclosure
-  // rule with none of the clicking.
-  function verbsFor(id: string): HTMLElement | undefined {
-    const body = document.createElement("div");
-    if (id === "index") indexVerbs(body);
-    if (id === "server") serverVerbs(body);
-    // Only once there is a commit to come back to. Before that there is no
-    // wall to be stuck at, and the verb would be a control looking for a job.
-    if (
-      id === "files" &&
-      headOid(world.local) !== undefined &&
-      !status(world).every(isClean)
-    ) {
-      body.append(
-        verb("Put this work aside", () => {
-          act(
-            stash(world),
-            `local:ref:${STASH}`,
-            "Your work is a commit off to the side. Your files are clean.",
-          );
-        }),
-      );
-    }
-    if (id === "laptop") {
-      body.append(
+    if (ghost && unreachable(world).includes(oid)) {
+      item.append(
         verb(
-          "Start over",
+          "Point this branch back here",
           () => {
-            world = start_;
-            open.clear();
-            act(world, "laptop", "Back to the beginning.");
+            act(resetTo(world, oid), "git", "Back on the old line. The replayed ones are unreachable now.");
           },
           true,
         ),
       );
     }
-    return body.childElementCount === 0 ? undefined : body;
+    void parents;
+    return item;
   }
 
-  // One lane, to the right of the picture, holding one card per open entity
-  // and the suggestion. Each card stands level with the row it belongs to, and
-  // slides down only far enough to clear the card above it, so the lane reads
-  // top to bottom in the same order as the picture.
-  function paintLane(): void {
-    lane.replaceChildren();
-    const cards: { at: string; el: HTMLElement }[] = [];
-    for (const id of Object.keys(FRAMES)) {
-      if (!open.has(id)) continue;
-      const card = document.createElement("section");
-      card.className = "card";
-      const name = document.createElement("h2");
-      name.textContent = FRAMES[id]?.title ?? id;
-      card.append(name);
-      // What this thing is, then what can be done to it. The sentence is the
-      // one place the piece explains in words, and it stands beside the thing
-      // it explains for as long as that thing is open.
-      const what = WHAT[id];
-      if (what !== undefined) card.append(line(what, "what"));
-      const verbs = verbsFor(id);
-      if (verbs !== undefined) card.append(verbs);
-      cards.push({ at: id, el: card });
-    }
-    if (hintText !== "" && hintAt !== undefined) {
-      const card = document.createElement("section");
-      card.className = "card hint";
-      card.append(line(hintText, "ask"));
-      cards.push({ at: hintAt, el: card });
+  // What is left of .git's verbs once a branch stopped being drawn as one. A
+  // branch is a name pinned to a commit, and it is already drawn that way on the
+  // row it points at - so checkout lives on that chip, and this holds only the
+  // verbs that move pointers around. Merge is always here, because settling with
+  // Gary is the core loop; replay and reset wait for open, since rebase in
+  // someone's first minute teaches nothing.
+  function branchControls(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "branch-controls";
+    const head = world.local.head;
+    const current = head.kind === "branch" ? head.name : undefined;
+    const names = Object.keys(world.local.refs).filter((n) => n !== STASH);
+
+    if (naming) {
+      const named = document.createElement("input");
+      named.type = "text";
+      named.className = "message";
+      named.placeholder = "new branch name";
+      named.setAttribute("aria-label", "New branch name");
+      named.value = branchName;
+      named.addEventListener("input", () => {
+        branchName = named.value;
+      });
+      wrap.append(
+        named,
+        verb("Start a branch here", () => {
+          const to = branchName.trim() || "feature";
+          branchName = "";
+          naming = false;
+          act(branch(world, to), "git", `Started ${to} here.`);
+        }),
+      );
     }
 
-    const flowing = graph.layout === "narrow";
-    lane.hidden = cards.length === 0;
-    if (flowing) lane.dataset["flow"] = "true";
-    else delete lane.dataset["flow"];
-
-    let cursor = 0;
-    const placed = cards
-      .map((card) => ({ ...card, top: graph.topOf(card.at) ?? 0 }))
-      .sort((a, b) => a.top - b.top);
-    for (const card of placed) {
-      lane.append(card.el);
-      if (flowing) continue;
-      const top = Math.max(card.top, cursor);
-      card.el.style.top = `${String(top)}px`;
-      cursor = top + card.el.offsetHeight + 8;
-    }
-  }
-
-  // Suggests, never gates. Every legal action stays available whatever this
-  // line happens to be saying. Orientation comes first because a git verb is
-  // unreachable while the thing it acts on is still folded away; after that
-  // the curriculum drives, and it retires when there is nothing left to show.
-  function nextPrompt(): void {
-    met = record(met, world, start_);
-    for (const [id, ask] of ORIENT) {
-      if (!open.has(id)) {
-        suggest(ask, id);
-        return;
+    if (current !== undefined) {
+      for (const other of names) {
+        if (other === current) continue;
+        if (canFastForward(world, other)) {
+          wrap.append(
+            verb(`Merge ${other} into ${current}`, () => {
+              act(merge(world, other), "git", `Nothing to merge: ${current} moved forward to ${other}.`);
+            }),
+          );
+          continue;
+        }
+        if (phase === "open" && canRebase(world, other)) {
+          wrap.append(
+            verb(`Replay ${current} onto ${other}`, () => {
+              act(rebase(world, other), "git", "Same changes, new hashes. The old ones are still in .git.");
+            }),
+          );
+        }
+        const next = startMerge(world, other);
+        if (next === world) continue;
+        wrap.append(
+          verb(`Merge ${other} into ${current}`, () => {
+            const conflicts = next.merging?.conflicts ?? [];
+            act(
+              next,
+              "index",
+              conflicts.length === 0
+                ? `Merged ${other}. Commit it to seal the two parents.`
+                : `${String(conflicts.length)} file both of you changed. Open Your Files.`,
+            );
+          }),
+        );
+      }
+      if (phase === "open" && headOid(world.local) !== undefined) {
+        wrap.append(
+          verb(
+            "Move the branch back",
+            () => {
+              act(resetBack(world), "git", `Moved ${current} back. The commit is still in .git.`);
+            },
+            true,
+          ),
+        );
       }
     }
-    const next = suggested(met);
-    suggest(next?.prompt ?? "", next?.at);
+
+    return wrap;
   }
 
-  // An entity's icon is its switch, both ways: pressing it opens the entity,
-  // pressing it again folds it away. Anything else opens the inspector of the
-  // object it is, which is where content and its verbs live.
-  graph.onSelect((id) => {
-    if (id in FRAMES) toggle(id);
-    else inspect(id);
-  });
+  // The Git Server: purely a visualisation, no controls at all.
+  function renderServer(): void {
+    const body = bodies.get("server");
+    if (body === undefined) return;
+    body.replaceChildren();
+    const head = headOid(world.remote);
+    if (head === undefined) {
+      body.append(line("Nothing pushed yet.", "empty"));
+      return;
+    }
+    const pinned = new Map<string, string[]>();
+    for (const [name, oid] of Object.entries(world.remote.refs)) {
+      pinned.set(oid, [...(pinned.get(oid) ?? []), `origin/${name}`]);
+    }
+    const list = document.createElement("ol");
+    list.className = "commit-list";
+    for (const c of [...ancestry(world.remote.objects, head)].reverse()) {
+      const item = document.createElement("li");
+      item.className = "commit-row";
+      item.dataset["testid"] = "commit";
+      const swatch = document.createElement("span");
+      swatch.className = "oid-swatch";
+      swatch.style.setProperty("--hue", String(hueFor(c.oid)));
+      const label = document.createElement("span");
+      label.textContent = `${c.oid} ${c.message}`;
+      item.append(swatch, label);
+      for (const name of pinned.get(c.oid) ?? []) {
+        const chip = document.createElement("span");
+        chip.className = "ref-chip";
+        chip.textContent = name;
+        item.append(chip);
+      }
+      list.append(item);
+    }
+    body.append(list);
+  }
 
-  // The same call the inspector's verb makes, so there is one way to stage and
-  // the drag is an enhancement over it rather than a second implementation.
-  graph.onDrop((from, to) => {
-    if (!from.startsWith("file:") || to !== "index") return;
-    const path = from.slice(5);
-    if (isClean(statusFor(world, path))) return;
-    const next = stage(world, path);
-    graph.sendObject(from, "index", "inside");
-    act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
-  });
+  // Suggests, never gates: every legal action stays available whatever this
+  // line happens to be saying, and it retires once nothing is left to show.
+  function nextPrompt(): void {
+    if (phase === "tour") return; // the tour writes its own copy
+    const next = suggested(met);
+    suggest(next?.prompt ?? "", next?.teaches ?? "", next?.at);
+  }
 
-  // The lane stands level with the picture, so it is re-placed whenever the
-  // picture moves.
-  window.addEventListener("resize", () => {
-    paintLane();
-  });
-  graph.onLayoutChange(() => {
-    paintLane();
-  });
+  // Names the next entity and hands it its own sentence. Once all four are
+  // named the tour is over for good: the curriculum takes the hint from here,
+  // and there is no way back into a phase that only introduces things.
+  function reveal(): void {
+    const id = TOUR_ORDER[shown];
+    if (id === undefined) return;
+    panels.get(id)?.setAttribute("data-revealed", "true");
+    shown += 1;
+    drawArrows();
+    suggest(`This is ${PANEL_TITLE[id] ?? id}.`, WHAT[id] ?? "", id);
+    if (shown < TOUR_ORDER.length) return;
+    phase = "core";
+    nextButton.remove();
+    advance();
+    redraw();
+    nextPrompt();
+  }
 
-  nextPrompt();
+  advance();
+  redraw();
+  reveal(); // Your Files, named before the visitor has pressed anything
 }

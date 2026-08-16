@@ -300,6 +300,23 @@ This is a density target, not a sparseness target. Empty is as much a failure
 as cluttered: whitespace that carries no information is wasted, and so is a
 paragraph restating what the graphic already shows.
 
+### Only remove things when prompted
+
+"Cut it" above ranks the options for material you are *adding*. It is never a
+licence to delete what is already on screen. **Do not remove any existing
+element, label, title, control, or behaviour unless the prompt asked for that
+removal.** A request to change one thing is not permission to prune its
+neighbours, and "this reads cleaner without it" is not a prompt.
+
+This rule outranks the density principle, because the two failure modes are not
+symmetric: something wrongly kept is visible and can be cut next turn, while
+something wrongly deleted is invisible — the user has to notice an absence and
+then work out what used to be there. Entity titles were removed once on this
+reasoning and the interface stopped being legible.
+
+If a change genuinely seems to require deleting something, do the change without
+the deletion, then say what you would cut and why, and let the user decide.
+
 ### What the finished display owes the visitor
 
 - **What is on screen at rest is the minimum that carries the current state.**
@@ -407,3 +424,11 @@ are unavailable.
 Comments should be descriptive but concise, no more than 2 lines of text max. Each line
 of code should be no more than 80 characters per line. The same expression can span
 multiple lines - an 80 char limit is purely for readability.
+
+## Modification Rules 
+
+**IMPORTANT** You never delete or remove an element, line of code, file, div, entity, etc,  unless you have explicit authorisation from the user. 
+
+## Overall direction
+
+The entire point of this project is an interactive system that teaches a user how to do something. Do not overengineer something. At every stage, reflect on whether the model is too complicated, and whether a complete beginner will understand the mental model being developed.

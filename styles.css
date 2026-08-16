@@ -96,6 +96,57 @@ main {
   color: var(--muted);
 }
 
+/* A scroll runway, not a screen: tall enough that the sticky viewport inside it
+   sits still for long enough to read four lines in two beats. The height is the
+   whole knob - JS reads progress through it, nothing else times this.
+
+   Without script it is none of that: two beats of ordinary prose, stacked and
+   readable. The runway below is switched on by initIntro's first paint, so it
+   only exists where something is driving it. */
+.intro {
+  position: relative;
+}
+
+.intro-beat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em 0.6em;
+  padding: 1.5rem 2rem;
+}
+
+.intro[data-live] {
+  height: 300vh;
+}
+
+.intro[data-live] .intro-track {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Both beats occupy the same box; scroll progress drives which one is
+   visible, so a beat never has to fight the other for layout space. */
+.intro[data-live] .intro-beat {
+  position: absolute;
+  inset: 0;
+}
+
+/* Opaque by default and dimmed by script on its first paint, so with no JS the
+   introduction is four readable lines rather than a blank three viewports. */
+.intro-line {
+  margin: 0;
+  font-size: clamp(14px, 2vmin, 2vmin);
+  line-height: 1.25;
+  text-align: center;
+  transition: opacity 200ms ease;
+}
+
 /* The picture is width-limited: it is wider than it is tall, so every pixel of
    width it is given comes back as height. Capping the page would letterbox the
    picture against the viewport it was just given, so only the title is capped. */
@@ -106,11 +157,9 @@ h1 {
   line-height: 1.1;
 }
 
-/* One suggestion of what to do next, one consequence of what just happened -
-   both spoken, neither printed. The suggestion is drawn beside the entity it
-   names and feedback lands on the object, so on screen these two would be the
-   same words twice, further from the thing than the copy that points at it. */
-.prompt,
+/* One consequence of what just happened, spoken and not printed: feedback lands
+   on the object it happened to, so on screen this would be the same words twice
+   and further from the thing than the copy that points at it. */
 .said {
   position: absolute;
   width: 1px;
@@ -120,310 +169,365 @@ h1 {
   white-space: nowrap;
 }
 
+/* The walkthrough, in the gutter on the entity's left - the opposite side from
+   the hover note, so an instruction and a description can never land on top of
+   each other. Someone who has never used git needs this on screen permanently,
+   which is the one thing the old screen-reader-only version could not do. */
+.hint {
+  position: absolute;
+  inset-inline-end: 100%;
+  top: 50%;
+  z-index: 1;
+  width: 15vw;
+  padding-inline-end: 0.9rem;
+  text-align: end;
+  transform: translateY(-50%);
+}
+
+.hint[hidden] {
+  display: none;
+}
+
+/* What to do, then why it is worth doing. The instruction carries the weight
+   and the accent border already points at the same panel, so the reason can sit
+   quieter underneath without being lost. */
+.hint-do {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.hint-why {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* The picture takes the whole screen and never scrolls: the four panels divide
+   the height between them and each one scrolls its own list. A page-level
+   scrollbar here would move the diagram out from under the sentence about it.
+   Overflow stays visible because the panels cannot exceed this box - each one
+   shrinks and scrolls its own body - and because the notes hang into the
+   gutter beside it, which a clip box would swallow. */
 .stage {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-
-  /* The lane the suggestion lives in, reserved rather than overlaid: a hint
-     that covers part of the picture is a hint that has to be dismissed. */
-  padding-inline-end: 15rem;
+  gap: 0.4rem;
+  width: 70vw;
+  align-self: center;
 }
 
-/* One lane beside the picture, holding the suggestion and what each open
-   entity lets you do. Every card stands level with the row it belongs to,
-   which is the whole difference between telling someone what to do and
-   showing them where - and it means nothing has to be summoned or dismissed. */
-.lane {
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: 14rem;
-  pointer-events: none;
-}
+/* Four panels, always open, stacked in the order a change travels: out of
+   Your Files, into the index, into .git, and only then across the network
+   gap to the server - so the reading order and the picture agree.
 
-.card {
-  position: absolute;
-  inset-inline: 0;
-  margin: 0;
-  padding: 0.55rem 0.75rem;
+   Height goes where the content is, as a basis rather than a minimum: a basis
+   is a floor while there is room and still shrinks when there is not, so the
+   stack fills the viewport exactly and nothing spills out of it. .git holds a
+   whole history and Your Files holds an editor, so those two grow; the index
+   holds a couple of rows and a message, so it takes the least. */
+.panel {
+  position: relative;
+  display: flex;
+  flex: 0 1 18vh;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
-  font-size: 0.92rem;
-  line-height: 1.45;
-  pointer-events: auto;
-  transition: top 260ms ease;
+  transition: opacity 300ms ease;
 }
 
-.card h2 {
-  margin: 0 0 0.4rem;
-  color: var(--muted);
-  font-size: 0.8rem;
-  letter-spacing: 0.02em;
+/* Named by the tour, or waiting to be. Opacity and visibility rather than
+   display: the four panels divide one viewport between them, so dropping one
+   out of layout would shift the other three every time one is revealed. */
+.panel[data-revealed="false"] {
+  opacity: 0;
+  visibility: hidden;
 }
 
-/* The suggestion, in the same pale blue the entity it names is wearing. */
-.card.hint {
+.panel[data-panel="server"] {
+  border-style: dashed;
+  border-color: var(--muted);
+  background: var(--remote);
+}
+
+/* The two panels with something in them worth reading: a whole history, and an
+   editor. They take any height the other two leave over. */
+.panel[data-panel="files"],
+.panel[data-panel="git"] {
+  flex: 1 1 26vh;
+}
+
+/* A list of names and content ids, and one line to describe the change. It
+   needs the least of the four and should not take more than it needs. */
+.panel[data-panel="index"] {
+  flex: 0 1 11vh;
+}
+
+/* The border a suggestion or a hover both borrow, so pointing at a thing
+   means one thing everywhere on the page. */
+.panel[data-hint="true"] {
   border-color: var(--accent);
 }
 
-.card .what {
-  margin: 0 0 0.5rem;
+/* The one sentence a panel earns, aligned beside it and otherwise invisible:
+   no border, no title, nothing to dismiss. Fine-pointer only - a phone gets
+   the tap-and-dismiss note built in script instead. */
+.desc {
+  position: absolute;
+  inset-inline-start: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 15vw;
+  margin: 0;
+  padding-inline-start: 0.9rem;
   color: var(--muted);
   font-size: 0.85rem;
-}
-
-.card .ask {
-  margin: 0;
-}
-
-/* The picture is the page, so it takes the box it is given and
-   preserveAspectRatio centres the drawing inside it. */
-.stage svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* ---- the shapes ---- */
-
-.node {
-  cursor: pointer;
-  transition: opacity 200ms ease;
-}
-
-.node:focus {
-  outline: none;
-}
-
-.shape {
-  fill: var(--panel);
-  stroke: var(--line);
-  stroke-width: 1.5;
-  transition: fill 150ms ease;
-}
-
-/* An entity is the same object whether open or closed, so the change between
-   the two is a move rather than a swap: the icon slides into its gutter and the
-   contents grow beside it. Closing runs backwards, the vertical borders closing
-   into the middle, which is what makes an entity trackable through the fold. */
-.shape.frame {
-  fill: var(--inner);
-  transition: x 260ms ease, y 260ms ease, width 260ms ease, height 260ms ease,
-    fill 150ms ease;
-}
-
-/* The laptop is the ground everything on your machine sits on, so it is the
-   only filled surface. Its contents are drawn on top of it, lighter. */
-[data-node="laptop"] .shape {
-  fill: var(--laptop);
-  stroke: var(--line);
-}
-
-[data-node="server"] .shape {
-  fill: var(--remote);
-  stroke: var(--muted);
-  stroke-dasharray: 7 5;
-}
-
-/* The other half of the sentence: the thing itself, in the same pale blue
-   hover and focus already use, so the border means one thing everywhere. */
-.node[data-hint="true"] .shape {
-  stroke: var(--accent);
-}
-
-.node:hover .shape {
-  stroke: var(--accent);
-}
-
-.node:focus-visible .shape {
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-.shape.commit,
-.shape.blob {
-  fill: hsl(var(--hue, 210) 42% 22%);
-  stroke: hsl(var(--hue, 210) 62% 58%);
-}
-
-.shape.chip {
-  fill: var(--ink);
-  stroke: var(--ink);
-}
-
-text {
-  font-family: system-ui, sans-serif;
+  line-height: 1.45;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
-.frame-title {
-  fill: var(--muted);
-  text-anchor: middle;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+@media (hover: hover) and (pointer: fine) {
+  .panel:hover .desc,
+  .panel:focus-within .desc {
+    opacity: 1;
+  }
 }
 
-.icon {
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.arrow {
+  align-self: center;
   color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
 }
 
-.node[data-kind="frame"] .icon {
-  transition: transform 260ms ease;
+/* Where the scrolling happens: a panel that outgrows its share scrolls its own
+   contents rather than pushing the picture past the bottom of the screen. */
+.panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow: hidden auto;
 }
 
-.icon-title {
-  fill: var(--ink);
-  font-size: 14px;
+/* Except Your Files, whose two halves scroll independently instead. */
+.panel[data-panel="files"] .panel-body {
+  overflow: hidden;
+}
+
+/* Every panel names itself on the left and carries its verbs on the right, so
+   "what is this" and "what can I do to it" are in the same place four times
+   over. In the flow rather than absolutely placed, so a long title pushes the
+   buttons along instead of sliding underneath them. */
+.panel-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: 0.6rem;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", menlo, monospace;
+  font-size: 0.95rem;
   font-weight: 600;
-  text-anchor: middle;
 }
 
-.empty {
-  fill: var(--muted);
-  font-size: 12px;
-  font-style: italic;
-  text-anchor: middle;
+.panel-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
 }
 
-.icon-badge {
-  fill: var(--muted);
-  font-size: 12px;
-  text-anchor: middle;
+.files-browser {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0.75rem;
 }
 
-.file-name {
-  fill: var(--ink);
-  font-size: 13px;
+.file-list {
+  overflow-y: auto;
+  flex: 0 0 12rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.file-list li[aria-current="true"] {
+  background: var(--inner);
+  outline: 1px solid var(--accent);
+}
+
+.file-editor {
+  flex: 1;
+  min-height: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--inset);
+  color: inherit;
+  font-family: ui-monospace, "SF Mono", menlo, monospace;
+  font-size: 0.85rem;
+  resize: none;
 }
 
 /* One letter, and colour says the same thing again, so nothing rests on
    colour alone. */
 .file-glyph {
-  fill: var(--muted);
-  font-size: 13px;
+  color: var(--muted);
   font-weight: 700;
-  text-anchor: end;
 }
 
-[data-glyph="A"] .file-glyph {
-  fill: var(--new);
+[data-glyph="A"] {
+  color: var(--new);
 }
 
-[data-glyph="M"] .file-glyph {
-  fill: var(--warn);
+[data-glyph="M"] {
+  color: var(--warn);
 }
 
-[data-glyph="S"] .file-glyph {
-  fill: var(--accent);
+[data-glyph="S"] {
+  color: var(--accent);
 }
 
-[data-glyph="D"] .file-glyph {
-  fill: var(--danger);
+[data-glyph="D"] {
+  color: var(--danger);
 }
 
-.oid {
-  fill: hsl(var(--hue, 210) 75% 74%);
+.blob-list,
+.commit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blob-list li,
+.commit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+}
+
+.commit-row {
   font-family: ui-monospace, "SF Mono", menlo, monospace;
-  font-size: 11px;
-  text-anchor: middle;
-}
-
-.chip-name {
-  fill: var(--bg);
-  font-size: 12px;
-  font-weight: 600;
-  text-anchor: middle;
-}
-
-/* A file can be dragged into the index on a pointer device, so it says so.
-   Touch gets tap-to-inspect instead, which is the same path the keyboard uses. */
-@media (hover: hover) and (pointer: fine) {
-  .node[data-kind="file"] {
-    cursor: grab;
-  }
-}
-
-/* The legal destination, visible before the drop rather than found by failing. */
-svg[data-dragging] [data-node="index"] .shape {
-  stroke: var(--accent);
-  stroke-dasharray: 6 4;
-}
-
-/* ---- the links ---- */
-
-.link {
-  stroke: var(--line);
-  stroke-width: 2;
-}
-
-/* The chain is the argument that a commit points at its parent, so it has to
-   read as a line rather than as the faintest thing on the canvas. */
-.link[data-kind="parent"] {
-  stroke: var(--ink);
-  stroke-width: 2;
-  opacity: 0.35;
-}
-
-.link[data-kind="pin"] {
-  stroke: var(--ink);
-  stroke-width: 1.5;
-}
-
-/* The one boundary anything has to cross. */
-.link[data-kind="network"] {
-  stroke: #8957e6;
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-}
-
-.link[data-hidden="true"] {
-  display: none;
-}
-
-/* ---- motion ---- */
-
-.flight {
-  fill: var(--accent);
-  transition: cx var(--flight-ms, 250ms) ease-in-out,
-    cy var(--flight-ms, 250ms) ease-in-out;
-}
-
-.flight[data-kind="network"] {
-  fill: #a371f7;
-}
-
-.node[data-entering="true"] {
-  opacity: 0;
 }
 
 /* Unreachable, not gone: what a rebase left behind is still in .git, and the
    drawing says so rather than quietly dropping it. */
-.node[data-ghost="true"] {
-  opacity: 0.3;
+.commit-row[data-ghost="true"] {
+  opacity: 0.45;
 }
 
-/* Feedback at the object it happened to, not at the bottom of the page. The
-   halo lets a note land on the object rather than in a clear margin: it stays
-   legible over a chip, a border, or another shape. */
-.note-text {
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 4px;
-  stroke-linejoin: round;
-  fill: var(--accent);
-  font-size: 12px;
+.oid-swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: hsl(var(--hue, 210) 62% 58%);
+}
+
+.ref-chip {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: system-ui, sans-serif;
+  font-size: 0.75rem;
   font-weight: 600;
-  text-anchor: middle;
 }
 
-.verb {
+/* A chip that is a branch you are not on is also the way onto it: the name and
+   the verb are one thing, because moving there is the only thing a name does.
+   Outlined rather than filled, so a destination reads differently from a label
+   without relying on colour to say so. */
+button.ref-chip {
+  border-color: var(--accent);
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+button.ref-chip:hover,
+button.ref-chip:focus-visible {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.branch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-block-start: 0.5rem;
+}
+
+.branch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.empty,
+.state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* ---- motion: a commit crossing from one panel to the next ---- */
+
+.flight {
+  position: absolute;
+  z-index: 2;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  transition: left var(--flight-ms, 250ms) ease-in-out,
+    top var(--flight-ms, 250ms) ease-in-out;
+}
+
+.flight[data-kind="network"] {
+  background: #a371f7;
+}
+
+/* One button, two sizes. A panel's own verb - Save, Commit, Push, Pull - is
+   the largest thing in its header because it is the thing to press; the verbs
+   that belong to a single row inside a panel stay row-sized. */
+.verb,
+.panel-action {
   min-height: 2.75rem;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--accent);
@@ -435,21 +539,82 @@ svg[data-dragging] [data-node="index"] .shape {
   cursor: pointer;
 }
 
-/* The one control that lives on the picture instead of inside an inspector,
-   and it says so by being quiet: an outline, in the corner, disabled until
-   there is something to take back. */
-.take-back {
-  position: absolute;
-  top: 0;
-  inset-inline-start: 0;
+.panel-action {
+  padding: 0.5rem 1.15rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.panel-action:disabled {
   border-color: var(--line);
   background: none;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* The one control that belongs to the whole page rather than to any one panel,
+   so it sits in the page's corner and costs the picture no height. Quiet by
+   design: an outline, disabled until there is something to take back. */
+.take-back {
+  position: fixed;
+  z-index: 2;
+  top: 1rem;
+  inset-inline-start: 1rem;
+  border-color: var(--line);
+  background: var(--panel);
   color: var(--muted);
 }
 
 .take-back:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Stacked under Undo in the same corner: both are page-level escape hatches,
+   and neither belongs to any one entity. */
+.start-again {
+  top: 4.25rem;
+}
+
+/* The tour's only control, at the end of the sentence it continues, inside the
+   hint rather than floating over the editor. It leaves with the tour. */
+.go-on {
+  margin-block-start: 0.6rem;
+  padding: 0.5rem 1.5rem;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Gary, outside the server's left border, because he is not on your machine and
+   never was. The gutter opposite the hover note, so the two never collide. */
+.actor {
+  position: absolute;
+  inset-inline-end: calc(100% + 0.7rem);
+  top: 0.75rem;
+  width: 3.25rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.actor svg {
+  width: 2.1rem;
+  height: 2.1rem;
+  fill: currentcolor;
+}
+
+.actor-name {
+  margin: 0.1rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+/* He brightens as his commit leaves him, so the change is attributable to a
+   person rather than appearing on the server from nowhere. */
+.actor[data-acting="true"] {
+  color: var(--accent);
 }
 
 .verb + .verb {
@@ -481,11 +646,16 @@ svg[data-dragging] [data-node="index"] .shape {
   }
 }
 
-/* ---- the inspector ---- */
+/* ---- the touch note ----
+   The one popup the page still has: on a coarse pointer there is no hover, so
+   tapping a panel opens this instead, dismissed by its own close button or by
+   a tap outside it. Fixed and centred, never anchored to a coordinate. */
 
 .inspector {
-  position: absolute;
+  position: fixed;
   z-index: 2;
+  top: 50%;
+  left: 50%;
   width: min(22rem, calc(100vw - 2.5rem));
   padding: 0.75rem 0.9rem 0.9rem;
   border: 1px solid var(--line);
@@ -493,16 +663,6 @@ svg[data-dragging] [data-node="index"] .shape {
   background: var(--panel);
   box-shadow: 0 8px 28px rgb(1 4 9 / 60%);
   transform: translate(-50%, -50%);
-  inset-inline-start: var(--anchor-x, 50%);
-  inset-block-start: var(--anchor-y, 50%);
-}
-
-.inspector[data-side="right"] {
-  transform: translate(0, -50%);
-}
-
-.inspector[data-side="left"] {
-  transform: translate(-100%, -50%);
 }
 
 .inspector header {
@@ -574,35 +734,63 @@ svg[data-dragging] [data-node="index"] .shape {
 }
 
 @media (width <= 700px) {
-  /* No room for a lane at the side, so it becomes a strip under the picture
-     and keeps pointing by colour instead of by position. */
-  .stage {
-    padding-inline-end: 0;
-    padding-block-end: 9rem;
+  .file-list {
+    flex-basis: 9rem;
   }
 
-  .lane {
-    inset: auto 0 0;
-    width: 100%;
-    max-height: 9rem;
-    overflow-y: auto;
+  /* No gutter at this width, so the instruction sits inside the panel it points
+     at rather than becoming a column one word wide. Script appends it last, so
+     order pulls it up under the title where it is read before the contents it
+     is talking about. */
+  .panel-head {
+    order: -2;
   }
 
-  .lane[data-flow] .card {
+  .hint {
     position: static;
-    margin-block-start: 0.4rem;
+    order: -1;
+    width: auto;
+    margin-block-end: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 0.4rem;
+    background: var(--inset);
+    text-align: start;
+    transform: none;
   }
 
-  /* The strip is the scarcest surface in the piece, so it carries the verbs
-     and not the explanations. The hidden live region still says them. */
-  .lane .what {
-    display: none;
+  /* Gary comes inside the border too, up in the corner opposite the title. */
+  .actor {
+    inset-inline: auto 0.75rem;
+    top: 0.6rem;
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    width: auto;
   }
 
-  /* No room to anchor beside anything, so it becomes a sheet. */
+  .actor svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  /* No gutter wide enough for prose at this width, so the note lies over the
+     panel it belongs to rather than becoming a column one word wide. */
+  .desc {
+    inset-inline: 0.6rem;
+    top: auto;
+    bottom: 0.5rem;
+    width: auto;
+    padding: 0.5rem 0.6rem;
+    border-radius: 0.4rem;
+    background: var(--inset);
+    transform: none;
+  }
+
+  /* No room to anchor beside anything, so the touch note becomes a sheet. */
   .inspector {
-    position: fixed;
     inset: auto 0 0;
+    top: auto;
+    left: auto;
     width: 100%;
     border-radius: var(--radius) var(--radius) 0 0;
     transform: none;

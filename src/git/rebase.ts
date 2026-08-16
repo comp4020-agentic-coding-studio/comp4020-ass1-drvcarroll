@@ -9,7 +9,7 @@ import type { World } from "./repo.js";
 import { headOid } from "./repo.js";
 import { materialise, isAncestor } from "./branch.js";
 import { combine, mergeBase } from "./merge.js";
-import { isClean, status } from "./status.js";
+import { isSettled, status } from "./status.js";
 
 // Whether replaying is the operation that applies: there is somewhere to go,
 // nothing half-done in the way, and the two lines have actually diverged.
@@ -22,7 +22,7 @@ export function canRebase(world: World, onto: string): boolean {
   if (world.local.head.kind !== "branch" || world.merging !== undefined) {
     return false;
   }
-  if (!status(world).every(isClean)) return false;
+  if (!status(world).every(isSettled)) return false;
   // Genuinely diverged, both ways. If either line already contains the other
   // there is nothing to replay, and pretending otherwise is a fast-forward.
   if (isAncestor(world.local.objects, ours, theirs)) return false;

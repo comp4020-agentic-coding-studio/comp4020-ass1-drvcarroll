@@ -2,31 +2,10 @@
 
 ## What was the breakthrough that moved the work forward?
 
-Auditing my own design and finding a hole in it, before writing the code that
-would have had the hole in it.
-
-I had a finished DNS explainer and replaced it with a git one, which felt like
-the big decision at the time. It was not. The real one came just after, when I
-walked the new design against the design principles in `CLAUDE.md` instead of
-against my enthusiasm for it, and noticed two things. Twelve stages in a fixed
-order, each with an instruction, is a Next button no matter how it is
-triggered. And an explainer about version control had nothing you could take
-back.
-
-Both corrections went into `CLAUDE.md` as rules before any code existed:
-**stages record, they never gate**, and a verb ships with its reversal or it is
-not finished. The second one stopped being damage control almost immediately.
-Unstage, discard and reset are the things people most want from git and least
-understand, so the gap in the design turned into the best part of the piece.
+the biggest breakthrough was probably a trick i picked up off one of my classmates (in my tutorial)
+that allowed me to attempt a complete teardown of my project and rebuilt it from scratch on such short notice. by spending about ~20 minutes creating a detailed plan, and chunking into discrete steps, 
+and ensuring that after every step claude reviews its own work against things like the spec, design pricniples, and aligment with intezractive web apps, i could one shot prompt the majority of the functionality. i also added this to claude. this way, you can build things much quicker, and the increased clarity at the start tends to avoid the horrible back and forth trying to iron out the nitty gritty details, which still ended up happening purely because i didnt spend enough time planning out the project in the first place, so thats on me.
 
 ## What did this work change about who I want to be as a software developer?
 
-I want to be the kind of developer who writes the rule down rather than
-remembering it.
-
-The habit that actually changed my output was the review gate: every step ends
-with check, look at the rendered page, commit, review against the spec, review
-against the principles, amend the plan. The "look" is the one I would have
-skipped. A step passed 293 tests and was visibly wrong the moment I opened it,
-twice in a row. A green suite is not a substitute for looking, and I now know
-that from my own repo rather than from a slide.
+honestly, lately ive been quite discouraged with my programming projects, as i felt as if LLMs are going to replace programmers completely, and everything will be vibe coded in 10 years. however, every time i work with claude (be it opus or sonnet) i am reminded that these LLMs are still very, very far away from desinging robust, secure, functional code that can actually be interacted with by other humans, without human oversight. every project for this ocurse so far has reinforced the fact that good systems design, careful architecture, and good coding practices are still crucial, and even necessary, to do things efficiently with LLMS. 

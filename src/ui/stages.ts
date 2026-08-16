@@ -1,7 +1,13 @@
 // The curriculum. A stage is a concept plus a predicate saying whether the
 // world shows evidence of it, so nothing here can advance without the visitor
-// changing the model. Stages record what has happened; they never gate what
-// may happen next, which is why nothing in this file returns a permission.
+// changing the model.
+//
+// Nothing in this file returns a permission: a stage is a fact about the world,
+// and the predicates cannot see the interface at all. The page does gate which
+// verbs it draws - a visitor who has never heard of git should not meet rebase
+// in their first minute - but it does that by reading the set these functions
+// return, which keeps the record honest and the gating one layer up where it
+// can be changed without touching the curriculum.
 
 import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
@@ -39,7 +45,7 @@ export const STAGES: readonly Stage[] = [
   {
     id: "edit",
     teaches: "Your files are just files on your machine.",
-    prompt: "Open Your Files and change a line. Watch what git does.",
+    prompt: "Change a line in any file, then watch what git notices.",
     at: "files",
     met: (world, start) =>
       JSON.stringify(world.working) !== JSON.stringify(start.working),
@@ -47,51 +53,32 @@ export const STAGES: readonly Stage[] = [
   {
     id: "stage",
     teaches: "The index is a second place on the same machine.",
-    prompt: "Git has noticed. Stage that change into the index.",
-    at: "index",
+    prompt: "Git has noticed. Press Save to put that change in the index.",
+    at: "files",
     met: (world) => Object.keys(world.index).length > 0,
   },
   {
     id: "commit",
     teaches: "A commit is a snapshot with a hash, stored locally.",
-    prompt: "The index is holding your change. Open it and commit.",
+    prompt: "Say what the change does, then press Commit.",
     at: "index",
     met: (world) => headOid(world.local) !== undefined,
   },
-  {
-    id: "reuse",
-    teaches: "Commits chain to a parent, and share the blobs they can.",
-    prompt: "Change another file and commit that too. Watch what gets reused.",
-    at: "files",
-    met: (world) => commits(world) >= 2,
-  },
-  {
-    id: "branch",
-    teaches: "A branch is a pointer, not a copy.",
-    prompt: "Open the main chip. A branch is just a name for a commit.",
-    at: "git",
-    met: (world) => local(world).length >= 2,
-  },
-  {
-    id: "checkout",
-    teaches: "Checking out is what puts different files on your disk.",
-    prompt: "Check out your new branch and commit something on it.",
-    at: "git",
-    met: (world) =>
-      world.local.head.kind === "branch" && world.local.head.name !== "main",
-  },
+  // Push, Gary's reply, and the merge that settles it come before branching:
+  // collaboration is the reason git exists, and a beginner who has never seen a
+  // second person touch the repo has no reason to care what a branch is.
   {
     id: "push",
     teaches: "The server is a different computer, and push is the only way up.",
-    prompt: "Nothing has left your machine yet. Open the Git Server and push.",
-    at: "server",
+    prompt: "Nothing has left your machine yet. Press Push.",
+    at: "git",
     met: (world) => headOid(world.remote) !== undefined,
   },
   {
     id: "diverged",
     teaches: "A push is refused when the server holds work you do not.",
-    prompt: "Let a teammate push from the Git Server, then try to push again.",
-    at: "server",
+    prompt: "Gary pushed too. Try pushing again and read what comes back.",
+    at: "git",
     met: (world) => {
       const theirs = headOid(world.remote);
       const mine = headOid(world.local);
@@ -102,17 +89,43 @@ export const STAGES: readonly Stage[] = [
   {
     id: "merge",
     teaches: "A merge commit has two parents, and that is the whole of it.",
-    prompt: "Fetch their work, then merge origin/main from your branch chip.",
+    prompt: "Press Pull to bring Gary's commit down, then merge it in.",
     at: "git",
     met: (world) =>
       Object.values(world.local.objects).some(
         (o) => o.kind === "commit" && o.parents.length >= 2,
       ),
   },
+  // Blob sharing waits until the loop has run: it is the first lesson that is
+  // about how git stores things rather than about getting work to a colleague,
+  // and putting it between commit and push stalled the one narrative that has to
+  // land first.
+  {
+    id: "reuse",
+    teaches: "Commits chain to a parent, and share the blobs they can.",
+    prompt: "Change another file and commit that too. Watch what gets reused.",
+    at: "files",
+    met: (world) => commits(world) >= 2,
+  },
+  {
+    id: "branch",
+    teaches: "A branch is a pointer, not a copy.",
+    prompt: "Press Branch, give it a name, and start one here.",
+    at: "git",
+    met: (world) => local(world).length >= 2,
+  },
+  {
+    id: "checkout",
+    teaches: "Checking out is what puts different files on your disk.",
+    prompt: "Click that branch's chip to move onto it, then commit something.",
+    at: "git",
+    met: (world) =>
+      world.local.head.kind === "branch" && world.local.head.name !== "main",
+  },
   {
     id: "stash",
     teaches: "Stash is a commit off to the side, not a special place.",
-    prompt: "Change a file, then try to check out another branch. Then stash.",
+    prompt: "Change a file, then put the work aside without committing it.",
     at: "files",
     met: (world) => Object.keys(world.local.refs).includes(STASH),
   },
@@ -126,7 +139,7 @@ export const STAGES: readonly Stage[] = [
   {
     id: "conflict",
     teaches: "A conflict is a state, resolved with the verbs you already have.",
-    prompt: "Change README.md yourself, let them change it too, and merge.",
+    prompt: "Change the same file Gary did, commit it, then merge his too.",
     at: "files",
     met: (world) => (world.merging?.conflicts.length ?? 0) > 0,
   },

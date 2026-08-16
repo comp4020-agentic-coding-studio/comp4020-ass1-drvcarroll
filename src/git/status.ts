@@ -28,6 +28,14 @@ export function isClean(status: FileStatus): boolean {
   return glyphFor(status) === "";
 }
 
+// What the pointer-moving verbs actually care about. Git blocks a merge or a
+// checkout on work it would have to overwrite, and a file it has never heard of
+// is not that: without this, a project holding any untracked file could never
+// merge at all.
+export function isSettled(status: FileStatus): boolean {
+  return status.untracked || isClean(status);
+}
+
 export function statusFor(world: World, path: string): FileStatus {
   const committed = headEntries(world.local)[path];
   const staged = world.index[path];

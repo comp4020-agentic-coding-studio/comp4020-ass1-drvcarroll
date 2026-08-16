@@ -6,7 +6,7 @@ import type { ObjectStore } from "./objects.js";
 import { ancestry, readBlob, readCommit, readTree } from "./objects.js";
 import type { World } from "./repo.js";
 import { headEntries, headOid } from "./repo.js";
-import { isClean, status } from "./status.js";
+import { isSettled, status } from "./status.js";
 
 export function isAncestor(
   objects: ObjectStore,
@@ -33,6 +33,12 @@ export function branch(world: World, name: string): World {
 export function materialise(world: World): World {
   const entries = headEntries(world.local);
   const working: Record<string, string> = {};
+  // Untracked files survive: git only writes over what it tracks, and throwing
+  // away a file it has never heard of would be losing the visitor's work.
+  for (const path of Object.keys(world.working)) {
+    if (entries[path] !== undefined || world.index[path] !== undefined) continue;
+    working[path] = world.working[path] as string;
+  }
   for (const [path, oid] of Object.entries(entries)) {
     working[path] = readBlob(world.local.objects, oid)?.text ?? "";
   }
@@ -43,7 +49,7 @@ export function materialise(world: World): World {
 // is the lesson: this is the wall the visitor hits on the way to stash.
 export function checkout(world: World, name: string): World {
   const at = world.local.refs[name];
-  if (at === undefined || !status(world).every(isClean)) return world;
+  if (at === undefined || !status(world).every(isSettled)) return world;
   return materialise({
     ...world,
     local: { ...world.local, head: { kind: "branch", name } },
@@ -61,7 +67,7 @@ export function merge(world: World, name: string): World {
     return world;
   }
   if (!isAncestor(world.local.objects, at, from)) return world;
-  if (!status(world).every(isClean)) return world;
+  if (!status(world).every(isSettled)) return world;
   return materialise({
     ...world,
     local: {
