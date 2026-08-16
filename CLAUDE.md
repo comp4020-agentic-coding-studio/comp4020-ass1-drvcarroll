@@ -311,10 +311,18 @@ paragraph restating what the graphic already shows.
   and a closed thing carries a small badge of what is inside so folding it away
   costs no information.
 - **Two lines of prose on the canvas, ever**: one suggestion of what to do next,
-  one consequence of what just happened. Explanation belongs in the inspector of
-  the thing being explained, where it costs nothing until asked for. Each
-  entity's inspector opens with one sentence saying what that entity is, because
-  naming the components before the process is what makes the process legible.
+  one consequence of what just happened. Explanation belongs beside the thing
+  being explained, where it costs nothing until asked for: one sentence saying
+  what that entity is, because naming the components before the process is what
+  makes the process legible.
+- **Disclosure is not the same as a pop-up.** A verb belongs to the object it
+  acts on, but "belongs to" is about position, not about being locked behind a
+  panel. Where a thing has two states and few verbs, its verbs stand beside it
+  for as long as it is open, level with it, rather than waiting behind a menu
+  that has to be summoned and then dismissed. Keep a panel only where there is
+  something to work in - text to edit, a field to fill - and count every
+  summon-and-dismiss the visitor has to perform to reach a button that could
+  have been on screen already.
 - **Feedback appears at the object it happened to.** Information placed far from
   the thing it describes is read as unrelated, and a status line below the
   picture splits attention at the moment the concept is forming. A page-level
