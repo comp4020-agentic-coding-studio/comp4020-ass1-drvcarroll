@@ -96,7 +96,7 @@ still the right code, and only the domain around them was wrong.
 - [x] **15. Conflicts.** Resolved with the first two verbs the visitor learned.
 - [x] **16. Stash.**
 - [x] **17. Rebase.** Old commits ghosted, new oids, same content.
-- [ ] **18. Rewrite `STRUCTURE.md`,** naming the simplifications honestly.
+- [x] **18. Rewrite `STRUCTURE.md`,** naming the simplifications honestly.
 - [ ] **19. Re-push, confirm CI and Pages, final evidence check.**
 
 **Re-aligned after step 10.** Two changes, both from reviews rather than from
