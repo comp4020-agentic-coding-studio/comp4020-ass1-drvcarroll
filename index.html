@@ -3,76 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Who do you trust? — DNS at the scale it actually runs at</title>
+    <title>Your code is on your machine — what git actually does</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header>
-      <nav aria-label="Sections" class="jump">
-        <a href="#world">The network</a>
-        <a href="#readout">What it costs</a>
-        <a href="#log">What just happened</a>
-      </nav>
-    </header>
+    <!--
+      The only navigation a one-page explainer owes anyone: a way past the
+      heading and straight into the thing you came to use. Hidden until it is
+      focused, so it costs no surface and still serves a keyboard visitor.
+    -->
+    <nav aria-label="Skip">
+      <a class="skip" href="#stage">Skip to the picture</a>
+    </nav>
 
     <main>
-      <h1>Who do you trust?</h1>
+      <h1>Your code is on your machine</h1>
 
-      <p class="lede">
-        The name system answers trillions of questions a day on a handful of
-        machines at the top. It survives by <strong>forgetting slowly</strong>,
-        not by being big — and the same memory that saves it is what makes one
-        lie spread. Grow this network and see for yourself.
-      </p>
+      <!--
+        The page is three things: a suggestion, the picture, and an accessible
+        mirror of what just happened. Feedback itself lands on the object it
+        happened to, inside the picture, because information placed away from
+        the thing it describes reads as unrelated.
+      -->
+      <p data-prompt class="prompt">Open your laptop.</p>
 
-      <section id="world" aria-label="The network">
-        <div class="transport">
-          <button data-testid="interaction" data-next type="button">
-            Next message
-          </button>
-          <button data-back type="button" aria-label="Previous message">
-            ←
-          </button>
-          <label class="speed">
-            <span class="speed-name">Speed</span>
-            <input
-              data-speed
-              type="range"
-              min="0"
-              max="6"
-              step="1"
-              value="3"
-              aria-describedby="speed-note"
-            />
-            <span id="speed-note" data-speed-note class="speed-note"></span>
-          </label>
-        </div>
+      <div id="stage" data-graph data-testid="interaction" class="stage"></div>
 
-        <div data-graph class="stage"></div>
-
-        <p class="hint">
-          <strong>Click any machine</strong> to see what it is holding and what
-          it is costing. Everything on this page is one simulation with a
-          seed: a browser cannot watch a real resolver's cache, so this models
-          it rather than pretending to observe it.
-        </p>
-      </section>
-
-      <section id="readout" aria-label="What it costs">
-        <h2>What it costs</h2>
-        <p data-testid="output" data-headline class="headline"></p>
-      </section>
-
-      <section id="log" aria-label="Resolution log">
-        <h2>What just happened</h2>
-        <p class="hint">
-          The numbers above are the whole hierarchy at once. Click any machine
-          in the bottom row to follow one of its queries instead: the crowd
-          keeps running, dimmed, and <em>Next message</em> walks that one
-          question hop by hop.
-        </p>
-        <div data-log class="log"></div>
-      </section>
+      <p data-said data-testid="output" class="said" aria-live="polite"></p>
     </main>
 
     <script type="module" src="./main.ts"></script>

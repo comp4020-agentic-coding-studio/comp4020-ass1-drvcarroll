@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 
 // Mechanically-checkable lines from the assignment-1 spec. What the spec
 // leaves to a person (viewport behaviour, "one strong idea", process
-// legibility) isn't testable here — see the retro-prep notes instead.
+// legibility) isn't testable here.
 
 const distPath = resolve("dist/index.html");
+const page = (): Document =>
+  new JSDOM(readFileSync(distPath, "utf8")).window.document;
 
 describe("assignment 1: core interaction exists", () => {
   it("built the site", () => {
@@ -15,88 +17,59 @@ describe("assignment 1: core interaction exists", () => {
   });
 
   it("marks a primary interactive control", () => {
-    const doc = new JSDOM(readFileSync(distPath, "utf8")).window.document;
     expect(
-      doc.querySelector('[data-testid="interaction"]'),
+      page().querySelector('[data-testid="interaction"]'),
       'Tag the control the visitor uses with data-testid="interaction" — ' +
         "the spec asks for an interaction stated plainly enough to test.",
     ).toBeTruthy();
   });
 
   it("marks the region that changes in response", () => {
-    const doc = new JSDOM(readFileSync(distPath, "utf8")).window.document;
     expect(
-      doc.querySelector('[data-testid="output"]'),
+      page().querySelector('[data-testid="output"]'),
       'Tag the region that changes when the visitor interacts with ' +
-        'data-testid="output", so what "changes what they see" means is concrete.',
+        'data-testid="output", so what "changes what they see" means is ' +
+        "concrete.",
     ).toBeTruthy();
   });
 });
 
-// The visitor drives the walk rather than watching it, so the controls that
-// make that true are part of the contract. Only the static ones can be
-// asserted here — the machines become buttons at runtime, and standing up a
-// DOM that fetches real DNS to prove it would test the network, not the page.
-describe("assignment 1: the visitor drives the resolution", () => {
-  const page = (): Document =>
-    new JSDOM(readFileSync(distPath, "utf8")).window.document;
+// These assertions used to demand a step button, a seek-back and a speed
+// slider, because the page walked a fixed sequence and the transport was how
+// you drove it. They are inverted now, deliberately: the pivot's contract is
+// that the verb *is* the progression. A stage advances because the visitor
+// performed a real git operation on a real object, so any control whose only
+// job is to move through the explanation is the thing that must not come back.
+describe("assignment 1: the verb is the progression", () => {
+  it.each([
+    ["[data-next]", "a step control"],
+    ["[data-back]", "a seek-back control"],
+    ["[data-speed]", "a pacing control"],
+  ])("offers no %s", (selector, what) => {
+    expect(
+      page().querySelector(selector),
+      `A transport control (${what}) advances the visitor's position in a ` +
+        "story about git rather than changing git. Progression is earned by " +
+        "staging, committing and pushing, so this must stay absent.",
+    ).toBeNull();
+  });
 
-  it("advances one message at a time from a single control", () => {
+  it("carries the interaction testid on the picture itself", () => {
+    expect(
+      page().querySelector('[data-graph][data-testid="interaction"]'),
+      "The picture is the interaction: every verb lives in the inspector of " +
+        "the object it acts on, so there is no separate control to tag.",
+    ).toBeTruthy();
+  });
+
+  it("says at most two lines of prose outside the picture", () => {
     const doc = page();
+    const prose = doc.querySelectorAll("main > p");
     expect(
-      doc.querySelector('[data-next][data-testid="interaction"]'),
-      "The step control is the core interaction, so it carries the " +
-        "interaction testid rather than the lookup form's submit button.",
-    ).toBeTruthy();
-  });
-
-  it("can be stepped backwards as well as forwards", () => {
-    expect(
-      page().querySelector("[data-back]"),
-      "Seeking back is how a visitor re-reads a message they advanced " +
-        "past. Without it the walk is a one-way animation again.",
-    ).toBeTruthy();
-  });
-
-  it("offers a speed control whose lowest setting is manual", () => {
-    const speed = page().querySelector("[data-speed]");
-    expect(speed, "The pacing control is missing.").toBeTruthy();
-    expect(
-      speed?.getAttribute("min"),
-      "Zero is manual — the slider carries the mode as well as the rate, " +
-        "so its floor has to be 0 rather than a slowest non-zero speed.",
-    ).toBe("0");
-  });
-
-  it("no longer stacks a cache panel beside the graph", () => {
-    expect(
-      page().querySelector("[data-cache]"),
-      "The cache belongs to the resolver and is opened from it. A " +
-        "standalone panel means that fold got undone.",
-    ).toBeNull();
-  });
-});
-
-// The pivot's own contract: growth is the interaction, so the controls it
-// replaced have to stay gone. A level nav or a threat panel reappearing would
-// mean the page had drifted back to narrating a fixed sequence.
-describe("assignment 1: manipulation, not narration", () => {
-  const page = (): Document =>
-    new JSDOM(readFileSync(distPath, "utf8")).window.document;
-
-  it("offers no level selector", () => {
-    expect(
-      page().querySelector("[data-levels]"),
-      "Choosing a level is moving through a story about the system. The " +
-        "visitor grows the network instead.",
-    ).toBeNull();
-  });
-
-  it("offers no standalone threat panel", () => {
-    expect(
-      page().querySelector("[data-threat]"),
-      "The attacker is a property of a machine and is armed from its own " +
-        "inspector, not from a section beside the picture.",
-    ).toBeNull();
+      prose.length,
+      "One suggestion of what to do next, one consequence of what just " +
+        "happened. Explanation belongs in an inspector, where it costs " +
+        "nothing until it is asked for.",
+    ).toBeLessThanOrEqual(2);
   });
 });

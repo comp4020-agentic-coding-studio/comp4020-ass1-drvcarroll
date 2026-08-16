@@ -17,6 +17,22 @@
   box-sizing: border-box;
 }
 
+/* Out of the way until a keyboard visitor asks for it. */
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 2;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border: 2px solid var(--ink);
+  border-radius: 0.25rem;
+}
+
 body {
   margin: 0;
   padding: 2rem 1.25rem 4rem;

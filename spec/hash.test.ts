@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { expDelay, intBelow, mulberry32, pick } from "../src/sim/rng.js";
+import { hueFor, intBelow, mulberry32, oidFor, pick } from "../src/git/hash.js";
 
-// The simulation's claims are only worth as much as its reproducibility. If
-// the generator drifts, every assertion in sim.test.ts still passes while
-// measuring a different world — so the sequence itself is pinned here.
+// Content addressing is load-bearing: the explainer argues that identical
+// content is one object and that a rebased commit is a different object. Both
+// are claims about this file, so they are pinned here rather than asserted by
+// a caption on the page.
 
 describe("the seeded generator", () => {
   it("produces a fixed sequence for a given seed", () => {
@@ -52,27 +53,41 @@ describe("the seeded generator", () => {
   });
 });
 
-describe("arrival timing", () => {
-  // A Poisson process is what makes the query count over an interval
-  // independent of how finely the loop samples it.
-  it("draws delays averaging one over the rate", () => {
-    const rng = mulberry32(2);
-    const runs = 200000;
-    let total = 0;
-    for (let i = 0; i < runs; i += 1) total += expDelay(rng, 4);
-    expect(total / runs).toBeCloseTo(0.25, 2);
+describe("object ids", () => {
+  it("names identical content identically", () => {
+    expect(oidFor("hello")).toBe(oidFor("hello"));
   });
 
-  it("never returns zero, so a user cannot arrive twice at one instant", () => {
-    const rng = mulberry32(5);
-    for (let i = 0; i < 5000; i += 1) {
-      expect(expDelay(rng, 20)).toBeGreaterThan(0);
+  it("names different content differently", () => {
+    expect(oidFor("hello")).not.toBe(oidFor("hello "));
+  });
+
+  it("is seven hex characters, the abbreviation git shows", () => {
+    for (const text of ["", "a", "a much longer line of file content"]) {
+      expect(oidFor(text)).toMatch(/^[0-9a-f]{7}$/);
     }
   });
 
-  it("puts a silent user infinitely far in the future", () => {
-    const rng = mulberry32(9);
-    expect(expDelay(rng, 0)).toBe(Infinity);
-    expect(expDelay(rng, -1)).toBe(Infinity);
+  // Collisions would make "same content, same object" a lie on screen. Not a
+  // cryptographic claim, just enough headroom for a page-sized repository.
+  it("keeps a few thousand distinct payloads distinct", () => {
+    const seen = new Set(
+      Array.from({ length: 4000 }, (_, i) => oidFor(`line ${String(i)}`)),
+    );
+    expect(seen.size).toBe(4000);
+  });
+});
+
+describe("the colour an oid carries", () => {
+  it("gives one oid one hue, so sameness is seen before it is read", () => {
+    expect(hueFor("a3f91c2")).toBe(hueFor("a3f91c2"));
+  });
+
+  it("is a hue", () => {
+    for (const oid of ["a3f91c2", "0000000", "fffffff"]) {
+      const hue = hueFor(oid);
+      expect(hue).toBeGreaterThanOrEqual(0);
+      expect(hue).toBeLessThanOrEqual(360);
+    }
   });
 });
