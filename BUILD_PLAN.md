@@ -97,7 +97,9 @@ still the right code, and only the domain around them was wrong.
 - [x] **16. Stash.**
 - [x] **17. Rebase.** Old commits ghosted, new oids, same content.
 - [x] **18. Rewrite `STRUCTURE.md`,** naming the simplifications honestly.
-- [ ] **19. Re-push, confirm CI and Pages, final evidence check.**
+- [x] **19. Final checks and push.** `pnpm check` green (363 tests, 15 files),
+      `pnpm check:evidence` green, links clean against a fresh build. CI and
+      Pages still wait on step 12.
 
 **Re-aligned after step 10.** Two changes, both from reviews rather than from
 the plan being wrong:

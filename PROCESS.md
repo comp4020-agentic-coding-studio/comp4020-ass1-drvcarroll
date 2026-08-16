@@ -58,6 +58,9 @@ the object it described, and a commit's seven-character id overflowed its 44px
 circle. None of that is expressible as an assertion I would have thought to
 write. The review gate in `CLAUDE.md` now makes *look at the rendered page at
 both viewports* a step that cannot be skipped, sitting between check and commit.
+It kept paying: driving the page later found four more defects a green suite had
+no way to see, including a whole second lane of history that was never drawn
+([`92c2aa1`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-drvcarroll/commit/92c2aa1)).
 
 ## Where to look
 
