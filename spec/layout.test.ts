@@ -1,0 +1,164 @@
+import { describe, expect, it } from "vitest";
+import type { Box, LayoutName, SceneNode } from "../src/graph/layout.js";
+import { FRAME_IDS, TARGET, layout } from "../src/graph/layout.js";
+import type { World } from "../src/git/repo.js";
+import { commitIndex, edit, emptyWorld, stage } from "../src/git/repo.js";
+
+// Both viewports are marked in full, so neither is a fallback for the other,
+// and every entity can be open or closed. That is 32 pictures per viewport,
+// and all of them have to be a picture.
+
+const VIEWPORTS: LayoutName[] = ["wide", "narrow"];
+
+// Enough of a world that every compartment has something in it.
+function busyWorld(): World {
+  let world = emptyWorld();
+  world = stage(edit(world, "README.md", "# my project"), "README.md");
+  world = commitIndex(world, "first");
+  world = stage(edit(world, "main.ts", "console.log(1)"), "main.ts");
+  world = commitIndex(world, "second");
+  world = edit(world, "notes.md", "unstaged");
+  world = stage(edit(world, "main.ts", "console.log(2)"), "main.ts");
+  return world;
+}
+
+// Every subset of the five entities, as a set of open ids.
+const COMBINATIONS: Set<string>[] = Array.from(
+  { length: 2 ** FRAME_IDS.length },
+  (_, mask) =>
+    new Set(FRAME_IDS.filter((_id, bit) => (mask & (1 << bit)) !== 0)),
+);
+
+const overlaps = (a: Box, b: Box): boolean =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+const contains = (outer: Box, inner: Box): boolean =>
+  inner.x >= outer.x - 0.5 &&
+  inner.y >= outer.y - 0.5 &&
+  inner.x + inner.w <= outer.x + outer.w + 0.5 &&
+  inner.y + inner.h <= outer.y + outer.h + 0.5;
+
+const find = (nodes: SceneNode[], id: string): SceneNode | undefined =>
+  nodes.find((n) => n.id === id);
+
+describe.each(VIEWPORTS)("the picture at %s", (name) => {
+  it.each(COMBINATIONS.map((open, i) => [i, open] as const))(
+    "keeps everything inside the viewBox, combination %i",
+    (_i, open) => {
+      const scene = layout(busyWorld(), open, name);
+      const [, , w = 0, h = 0] = scene.viewBox.split(/\s+/).map(Number);
+      for (const node of scene.nodes) {
+        expect(
+          node.box.x >= 0 &&
+            node.box.y >= 0 &&
+            node.box.x + node.box.w <= w &&
+            node.box.y + node.box.h <= h,
+          `${node.id} is drawn outside the viewBox`,
+        ).toBe(true);
+      }
+    },
+  );
+
+  it.each(COMBINATIONS.map((open, i) => [i, open] as const))(
+    "never overlaps two things of the same kind, combination %i",
+    (_i, open) => {
+      const scene = layout(busyWorld(), open, name);
+      const kinds = ["file", "blob", "commit", "chip"] as const;
+      for (const kind of kinds) {
+        const same = scene.nodes.filter((n) => n.kind === kind);
+        for (const [i, a] of same.entries()) {
+          for (const b of same.slice(i + 1)) {
+            expect(
+              overlaps(a.box, b.box),
+              `${a.id} overlaps ${b.id}`,
+            ).toBe(false);
+          }
+        }
+      }
+    },
+  );
+
+  it.each(COMBINATIONS.map((open, i) => [i, open] as const))(
+    "gives every interactive thing a 44px target, combination %i",
+    (_i, open) => {
+      for (const node of layout(busyWorld(), open, name).nodes) {
+        expect(
+          Math.min(node.hit.w, node.hit.h),
+          `${node.id} is smaller than a thumb`,
+        ).toBeGreaterThanOrEqual(TARGET);
+      }
+    },
+  );
+
+  it("draws .git inside the laptop, which is the whole argument", () => {
+    const open = new Set(["laptop", "git", "files", "index"]);
+    const scene = layout(busyWorld(), open, name);
+    const laptop = find(scene.nodes, "laptop");
+    for (const id of ["git", "files", "index"]) {
+      const inner = find(scene.nodes, id);
+      expect(
+        laptop !== undefined &&
+          inner !== undefined &&
+          contains(laptop.box, inner.box),
+        `${id} is drawn outside the laptop`,
+      ).toBe(true);
+    }
+  });
+
+  it("keeps the server outside the laptop, across the gap", () => {
+    const scene = layout(busyWorld(), new Set(FRAME_IDS), name);
+    const laptop = find(scene.nodes, "laptop");
+    const server = find(scene.nodes, "server");
+    expect(server !== undefined && laptop !== undefined).toBe(true);
+    expect(overlaps(server?.box ?? { x: 0, y: 0, w: 0, h: 0 }, laptop?.box ?? { x: 0, y: 0, w: 0, h: 0 })).toBe(false);
+  });
+
+  it("puts everything in a frame inside that frame", () => {
+    const scene = layout(busyWorld(), new Set(FRAME_IDS), name);
+    for (const node of scene.nodes) {
+      if (node.parent === undefined) continue;
+      const frame = find(scene.nodes, node.parent);
+      if (frame === undefined || frame.open !== true) continue;
+      expect(
+        contains(frame.box, node.box),
+        `${node.id} escapes ${node.parent}`,
+      ).toBe(true);
+    }
+  });
+
+  it("shrinks back to two icons when nothing is open", () => {
+    const scene = layout(busyWorld(), new Set(), name);
+    expect(scene.nodes.map((n) => n.id)).toEqual(["server", "laptop"]);
+  });
+
+  it("still says what a closed entity is holding", () => {
+    const scene = layout(busyWorld(), new Set(), name);
+    expect(find(scene.nodes, "laptop")?.badge).toBe("2 commits");
+  });
+});
+
+describe("the commit chain", () => {
+  const scene = layout(busyWorld(), new Set(["laptop", "git"]), "wide");
+
+  it("runs oldest to newest, left to right", () => {
+    const xs = scene.nodes
+      .filter((n) => n.kind === "commit")
+      .map((n) => n.box.x);
+    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+  });
+
+  it("draws a line from each commit to its parent", () => {
+    expect(scene.links.filter((l) => l.kind === "parent")).toHaveLength(1);
+  });
+
+  it("pins the branch name to a commit", () => {
+    expect(scene.links.some((l) => l.kind === "pin")).toBe(true);
+  });
+
+  it("gives two different oids two different hues", () => {
+    const hues = scene.nodes
+      .filter((n) => n.kind === "commit")
+      .map((n) => n.hue);
+    expect(new Set(hues).size).toBe(hues.length);
+  });
+});

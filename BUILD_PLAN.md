@@ -53,15 +53,19 @@ and the same for `layout.ts`: the scene diff, the inspector, the keyboard
 handling, the resize re-anchor, `rowSizes` and the viewBox derivation are all
 still the right code, and only the domain around them was wrong.
 
-- [ ] **4. The machine layout.** Rewrite `src/graph/layout.ts`: three bars, the
+- [x] **4. The machine layout.** Rewrite `src/graph/layout.ts`: three bars, the
       lower two inside one laptop outline, the server across a network gap.
       Every entity open or closed. `spec/layout.test.ts` asserts, across the
       open/closed combinations at both viewports: nothing outside the viewBox,
       no overlap, `.git` contained within the laptop, targets at least 44px at
       420. Settle and record the commit graph direction here.
-- [ ] **4a. Icons.** `src/graph/icons.ts`: laptop, cylinder, folder, checklist,
+      *Settled: commits run oldest-left to newest-right, because a horizontal
+      chain fits a horizontal bar and a merge becomes two lines converging from
+      the left with no caption. Drawn box and hit target are separate fields on
+      a node, so a ref chip can look like a chip and still be a 44px target.*
+- [x] **4a. Icons.** `src/graph/icons.ts`: laptop, cylinder, folder, checklist,
       one stroke vocabulary, `currentColor`.
-- [ ] **5. Reduce the renderer.** Strip the DNS surface from
+- [x] **5. Reduce the renderer.** Strip the DNS surface from
       `src/graph/render.ts`, keep the scene diff, the inspector, the keyboard
       handling and the resize re-anchor. Add `src/graph/motion.ts`.
 - [ ] **6. The canvas is live.** Entities expand and collapse on click and
