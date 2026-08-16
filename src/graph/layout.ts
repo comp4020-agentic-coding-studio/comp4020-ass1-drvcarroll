@@ -42,6 +42,11 @@ export interface SceneNode {
   open?: boolean;
   dotted?: boolean;
   icon?: IconName;
+  // Where the icon is drawn, in both states. An open frame keeps its icon in a
+  // left gutter rather than swapping it for a box, so an entity can be tracked
+  // whether it is open or closed - and the move between the two is the
+  // animation that says they are the same thing.
+  iconBox?: Box;
   // A commit nothing points at any more: still in .git, drawn faint.
   ghost?: boolean;
   parent?: string;
@@ -72,6 +77,7 @@ interface Metrics {
   bottom: number;
   frameHead: number; // room for a frame's own label
   icon: Box;
+  gutter: number; // the left lane an open frame keeps for its own icon
   file: { w: number; h: number };
   blob: number;
   commit: number; // diameter
@@ -91,6 +97,7 @@ const METRICS: Record<LayoutName, Metrics> = {
     bottom: 24,
     frameHead: 26,
     icon: { x: 0, y: 0, w: 116, h: 84 },
+    gutter: 72,
     file: { w: 168, h: 52 },
     blob: 52,
     commit: 44,
@@ -106,6 +113,7 @@ const METRICS: Record<LayoutName, Metrics> = {
     bottom: 18,
     frameHead: 24,
     icon: { x: 0, y: 0, w: 104, h: 76 },
+    gutter: 52,
     file: { w: 176, h: 52 },
     blob: 52,
     commit: 44,
@@ -224,8 +232,9 @@ interface Placed {
 
 const EMPTY_ROW = 34;
 
-// A frame either shows its icon or its contents. Both cases return a height,
-// so the stack above and below simply moves.
+// An open frame keeps its icon in a left gutter and grows its contents beside
+// it, sharing the row. Closed, the icon is centred where the row would be. The
+// icon is on screen either way, so nothing the visitor opened ever goes missing.
 function placeFrame(
   frame: Frame,
   world: World,
@@ -237,35 +246,56 @@ function placeFrame(
 ): Placed {
   const isOpen = open.has(frame.id);
   const inner = {
-    x: at.x + m.pad,
+    x: at.x + m.pad + m.gutter,
     y: at.y + m.frameHead,
-    w: at.w - m.pad * 2,
+    w: at.w - m.pad * 2 - m.gutter,
   };
   const body: Placed = isOpen
     ? fill(inner)
     : { nodes: [], links: [], height: m.icon.h };
 
-  const height = m.frameHead + body.height + m.pad;
-  const box = { x: at.x, y: at.y, w: at.w, h: height };
+  // Never shorter than its own icon, so the gutter is a lane rather than a
+  // crop, however little the compartment happens to be holding.
+  const height = Math.max(
+    m.frameHead + body.height + m.pad,
+    m.gutter + m.pad * 2,
+  );
+  const box = isOpen
+    ? { x: at.x, y: at.y, w: at.w, h: height }
+    : // Closed, the frame *is* its icon, centred where the bar would be.
+      {
+        x: at.x + (at.w - m.icon.w) / 2,
+        y: at.y,
+        w: m.icon.w,
+        h: m.icon.h,
+      };
+  // Open, in the gutter and vertically centred; closed, above its own name.
+  const closedSize = Math.min(box.w - 24, box.h - 44);
+  const iconBox = isOpen
+    ? {
+        x: at.x + m.pad,
+        y: at.y + (height - m.gutter) / 2,
+        w: m.gutter,
+        h: m.gutter,
+      }
+    : {
+        x: box.x + (box.w - closedSize) / 2,
+        y: box.y + 6,
+        w: closedSize,
+        h: closedSize,
+      };
 
   const shell = node({
     id: frame.id,
     kind: "frame",
     title: frame.title,
     icon: frame.icon,
+    iconBox,
     open: isOpen,
     dotted: frame.dotted,
     badge: badgeFor(world, frame.id),
     empty: isOpen ? body.empty : undefined,
-    box: isOpen
-      ? box
-      : // Closed, the frame *is* its icon, centred where the bar would be.
-        {
-          x: at.x + (at.w - m.icon.w) / 2,
-          y: at.y,
-          w: m.icon.w,
-          h: m.icon.h,
-        },
+    box,
     parent,
   });
 
@@ -508,50 +538,31 @@ export function layout(
       const innerLinks: Link[] = [];
       let y = inside.y;
 
-      const git = placeFrame(
-        FRAMES["git"] as Frame,
-        world,
-        open,
-        { x: inside.x, y, w: inside.w },
-        m,
-        (content) => placeCommits("local", world, content, m),
-        "laptop",
-      );
-      inner.push(...git.nodes);
-      innerLinks.push(...git.links);
-      y += git.height + m.gap;
-
-      // Your files and the index share one row: the index is a file on the
-      // same machine, so staging is a short move sideways, not a journey.
-      const side = name === "narrow" ? inside.w : (inside.w - m.gap) / 2;
-      const files = placeFrame(
-        FRAMES["files"] as Frame,
-        world,
-        open,
-        { x: inside.x, y, w: side },
-        m,
-        (content) => placeFiles(world, content, m),
-        "laptop",
-      );
-      const indexTop = name === "narrow" ? y + files.height + m.gap : y;
-      const indexLeft = name === "narrow" ? inside.x : inside.x + side + m.gap;
-      const index = placeFrame(
-        FRAMES["index"] as Frame,
-        world,
-        open,
-        { x: indexLeft, y: indexTop, w: side },
-        m,
-        (content) => placeIndex(world, content, m),
-        "laptop",
-      );
-      inner.push(...files.nodes, ...index.nodes);
-      innerLinks.push(...files.links, ...index.links);
-
-      const bottom =
-        name === "narrow"
-          ? indexTop + index.height
-          : y + Math.max(files.height, index.height);
-      return { nodes: inner, links: innerLinks, height: bottom - inside.y };
+      // One entity per row, full width, and the stack reads in the direction a
+      // change travels: out of your files, into the index, into .git, and only
+      // then across the gap. The same order at both viewports, because the
+      // picture was already vertical and had nothing to gain from a split row.
+      const fill: Record<string, (c: { x: number; y: number; w: number }) => Placed> = {
+        git: (c) => placeCommits("local", world, c, m),
+        index: (c) => placeIndex(world, c, m),
+        files: (c) => placeFiles(world, c, m),
+      };
+      for (const [row, id] of ["git", "index", "files"].entries()) {
+        if (row > 0) y += m.gap;
+        const placed = placeFrame(
+          FRAMES[id] as Frame,
+          world,
+          open,
+          { x: inside.x, y, w: inside.w },
+          m,
+          fill[id] as (c: { x: number; y: number; w: number }) => Placed,
+          "laptop",
+        );
+        inner.push(...placed.nodes);
+        innerLinks.push(...placed.links);
+        y += placed.height;
+      }
+      return { nodes: inner, links: innerLinks, height: y - inside.y };
     },
   );
   nodes.push(...laptop.nodes);

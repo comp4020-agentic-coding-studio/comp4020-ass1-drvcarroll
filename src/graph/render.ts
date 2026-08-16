@@ -275,23 +275,29 @@ export function createGraph(
       out.push(t);
     };
 
-    if (node.kind === "frame" && node.open === true) {
-      add("frame-title", box.x + 14, box.y + 18, node.title);
-      if (node.empty !== undefined) add("empty", c.x, c.y + 12, node.empty);
-      return out;
-    }
     if (node.kind === "frame") {
-      // Closed, the icon carries the identity and the badge carries what is
-      // inside, so folding an entity away costs no information.
-      // Icon, name, then what is inside it - all within the frame's own box,
-      // so a closed entity never writes on its own border.
-      const scale = Math.min(box.w - 24, box.h - 44) / ICON_GRID;
-      const glyph = el("path", {
-        class: "icon",
-        d: ICONS[node.icon ?? "cylinder"],
-        transform: `translate(${String(c.x - (ICON_GRID * scale) / 2)} ${String(box.y + 6)}) scale(${String(scale)})`,
-      });
-      out.push(glyph);
+      // The icon is drawn in both states, from the box the layout chose for it:
+      // in a left gutter when open, centred above its own name when closed. One
+      // element either way, so the move between them is a transition rather
+      // than a disappearance, and an entity can be tracked while it is open.
+      const at = node.iconBox ?? box;
+      out.push(
+        el("path", {
+          class: "icon",
+          d: ICONS[node.icon ?? "cylinder"],
+          transform: `translate(${String(at.x)} ${String(at.y)}) scale(${String(at.w / ICON_GRID)})`,
+        }),
+      );
+      if (node.open === true) {
+        // On the head line the layout already reserved, and left-aligned with
+        // the contents rather than with the gutter, so the row reads as icon
+        // then label then contents.
+        add("frame-title", at.x + at.w + 6, box.y + 18, node.title);
+        if (node.empty !== undefined) add("empty", c.x, c.y + 12, node.empty);
+        return out;
+      }
+      // Closed, the badge says what is inside, so folding an entity away costs
+      // no information.
       add("icon-title", c.x, box.y + box.h - 20, node.title);
       add("icon-badge", c.x, box.y + box.h - 6, node.badge ?? "");
       return out;
@@ -408,6 +414,16 @@ export function createGraph(
     // Geometry is rewritten rather than the group being replaced, so an object
     // the visitor is looking at stays the same element and keeps focus.
     const keep = group.getAttribute("data-open");
+    // A frame's outline and icon are carried over rather than rebuilt, so the
+    // CSS transition on them has something continuous to animate: the icon
+    // slides between gutter and centre, and the box shrinks into it.
+    const carried = new Map<string, Element>();
+    if (node.kind === "frame") {
+      for (const sel of [".shape", ".icon"]) {
+        const found = group.querySelector(sel);
+        if (found !== null) carried.set(sel, found);
+      }
+    }
     group.replaceChildren();
     const hit = el("rect", {
       class: "hit",
@@ -417,7 +433,21 @@ export function createGraph(
       height: String(node.hit.h),
       fill: "transparent",
     });
-    group.append(...shapeFor(node), hit, ...textFor(node));
+    const parts = [...shapeFor(node), hit, ...textFor(node)].map((fresh) => {
+      const sel = fresh.classList.contains("icon")
+        ? ".icon"
+        : fresh.classList.contains("shape")
+          ? ".shape"
+          : "";
+      const prev = carried.get(sel);
+      if (prev === undefined) return fresh;
+      for (let i = 0; i < fresh.attributes.length; i += 1) {
+        const attr = fresh.attributes[i] as Attr;
+        prev.setAttribute(attr.name, attr.value);
+      }
+      return prev;
+    });
+    group.append(...parts);
     if (keep !== null) group.setAttribute("data-open", keep);
   }
 

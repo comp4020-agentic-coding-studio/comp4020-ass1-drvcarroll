@@ -113,8 +113,14 @@ h1 {
   transition: fill 150ms ease;
 }
 
+/* An entity is the same object whether open or closed, so the change between
+   the two is a move rather than a swap: the icon slides into its gutter and the
+   contents grow beside it. Closing runs backwards, the vertical borders closing
+   into the middle, which is what makes an entity trackable through the fold. */
 .shape.frame {
   fill: var(--inner);
+  transition: x 260ms ease, y 260ms ease, width 260ms ease, height 260ms ease,
+    fill 150ms ease;
 }
 
 /* The laptop is the ground everything on your machine sits on, so it is the
@@ -169,6 +175,10 @@ text {
   stroke-linecap: round;
   stroke-linejoin: round;
   color: var(--muted);
+}
+
+.node[data-kind="frame"] .icon {
+  transition: transform 260ms ease;
 }
 
 .icon-title {
