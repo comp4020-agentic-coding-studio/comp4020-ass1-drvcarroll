@@ -18,7 +18,15 @@ the full version; this is the checklist.
 6. Review against the design principles: a persistent control that belonged in
    an inspector, a stage reachable without changing the model, a verb without
    its reversal, prose past two lines.
-7. Amend the remaining steps here if 5 or 6 found drift.
+7. Review the interface as an interface: UI principles and design practice,
+   interaction design, usability metrics, colour theory.
+8. Review the code: correct for the right reasons, nothing duplicated that
+   should have been modified, nothing recomputed that could be derived once,
+   still readable by someone who did not write it.
+9. Amend the remaining steps here if 5 through 8 found drift.
+
+No part of this needs the user. It is a self-check done and acted on in the same
+run, which is what makes running to the end safe rather than reckless.
 
 ## The idea
 
