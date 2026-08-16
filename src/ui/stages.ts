@@ -5,6 +5,7 @@
 
 import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
+import { isAncestor } from "../git/branch.js";
 
 export interface Stage {
   readonly id: string;
@@ -70,6 +71,32 @@ export const STAGES: readonly Stage[] = [
     teaches: "The server is a different computer, and push is the only way up.",
     prompt: "Nothing has left your machine yet. Open the server and push.",
     met: (world) => headOid(world.remote) !== undefined,
+  },
+  {
+    id: "diverged",
+    teaches: "A push is refused when the server holds work you do not.",
+    prompt: "Let a teammate push from the server, then try to push again.",
+    met: (world) => {
+      const theirs = headOid(world.remote);
+      const mine = headOid(world.local);
+      if (theirs === undefined || mine === undefined) return false;
+      return !isAncestor(world.local.objects, theirs, mine);
+    },
+  },
+  {
+    id: "merge",
+    teaches: "A merge commit has two parents, and that is the whole of it.",
+    prompt: "Fetch their work, then merge origin/main from your branch chip.",
+    met: (world) =>
+      Object.values(world.local.objects).some(
+        (o) => o.kind === "commit" && o.parents.length >= 2,
+      ),
+  },
+  {
+    id: "conflict",
+    teaches: "A conflict is a state, resolved with the verbs you already have.",
+    prompt: "Change README.md yourself, let them change it too, and merge.",
+    met: (world) => (world.merging?.conflicts.length ?? 0) > 0,
   },
 ];
 

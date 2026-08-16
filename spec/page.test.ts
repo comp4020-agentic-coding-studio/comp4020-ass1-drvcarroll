@@ -183,6 +183,23 @@ describe("edit, stage, commit, by keyboard and typing alone", () => {
     expect(node("file:README.md")?.getAttribute("data-glyph")).toBe("A");
   });
 
+  // The verb has to arrive while the visitor is still looking at the file they
+  // just changed. It used to arrive only if they closed the panel and reopened.
+  it("offers the stage verb without the panel being reopened", () => {
+    press("file:README.md");
+    type("changed");
+    press_("Stage this change");
+    press("index");
+    press_("Commit these changes");
+    press("file:README.md");
+    expect(verbs().some((b) => b.textContent?.includes("Stage"))).toBe(false);
+    type("changed again");
+    expect(verbs().some((b) => b.textContent?.includes("Stage"))).toBe(true);
+    expect(document.querySelector(".inspector .state")?.textContent).toContain(
+      "Changed since",
+    );
+  });
+
   it("stages the change, and a blob appears in the index", () => {
     press("file:README.md");
     type("changed");
@@ -220,6 +237,21 @@ describe("edit, stage, commit, by keyboard and typing alone", () => {
     expect(document.querySelector("[data-said]")?.textContent).toContain(
       "first commit",
     );
+  });
+
+  // A node born mid-interaction was drawn before its hue was set, so the same
+  // commit came out grey here and coloured on the server. Colour is the whole
+  // argument for "this is the same object", so a grey one is a wrong claim.
+  it("gives a commit its swatch the moment it is drawn", () => {
+    press("file:README.md");
+    type("changed");
+    press_("Stage this change");
+    press("index");
+    press_("Commit these changes");
+    const commit = document.querySelector<SVGGElement>(
+      '[data-node^="local:commit:"]',
+    );
+    expect(commit?.style.getPropertyValue("--hue")).not.toBe("");
   });
 
   it("keeps every verb inside an inspector, never in a toolbar", () => {

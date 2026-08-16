@@ -13,7 +13,8 @@ import {
   unstage,
 } from "../git/repo.js";
 import { branch, canFastForward, checkout, merge, resetBack } from "../git/branch.js";
-import { canPush, fetch, push } from "../git/remote.js";
+import { canPush, fetch, push, teammatePushes } from "../git/remote.js";
+import { abortMerge, startMerge } from "../git/merge.js";
 import { isClean, statusFor } from "../git/status.js";
 import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
@@ -54,6 +55,10 @@ const ORIENT: readonly (readonly [string, string])[] = [
 const FILE_IS =
   "A file on your disk. Change it and git notices, but does nothing " +
   "about it until you say so.";
+
+// What the teammate's commit contains. One line, so the conflict it causes is
+// readable in the file rather than something to be taken on trust.
+const TEAMMATE = "# my project\n\nEdited by someone else.\n";
 
 const HEAD_IS =
   "Where you are. HEAD names the branch you are on, and that is the branch " +
@@ -173,51 +178,59 @@ export function start(): void {
     text.className = "content";
     text.value = world.working[path] ?? "";
     text.setAttribute("aria-label", `Contents of ${path}`);
-    text.addEventListener("input", () => {
-      apply(edit(world, path, text.value));
-    });
-    body.append(text);
-
-    const state = statusFor(world, path);
-    body.append(
-      line(
-        state.untracked
-          ? "Git has never seen this file."
-          : state.modified
-            ? "Changed since your last commit."
-            : state.staged
-              ? "Staged, and ready for the next commit."
-              : "Unchanged since your last commit.",
-        "state",
-      ),
-    );
-
-    if (!isClean(state)) {
-      body.append(
-        verb("Stage this change", () => {
-          const next = stage(world, path);
-          graph.sendObject(`file:${path}`, "index", "inside");
-          // At the blob it just became, not at the compartment: a note beside
-          // the wrong object reads as being about the wrong object.
-          act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
-        }),
-      );
-    }
-    if (state.modified || state.untracked) {
-      body.append(
-        verb(
-          "Discard my change",
-          () => {
-            act(
-              discard(world, path),
-              "files",
-              `Discarded your changes to ${path}. That one is gone.`,
-            );
-          },
-          true,
+    // Everything below the text is rebuilt as you type, and the textarea is
+    // not: the verb you need next has to appear the moment it becomes legal,
+    // but rebuilding the box you are typing into would take the caret with it.
+    const rest = document.createElement("div");
+    const refresh = (): void => {
+      rest.replaceChildren();
+      const state = statusFor(world, path);
+      rest.append(
+        line(
+          state.untracked
+            ? "Git has never seen this file."
+            : state.modified
+              ? "Changed since your last commit."
+              : state.staged
+                ? "Staged, and ready for the next commit."
+                : "Unchanged since your last commit.",
+          "state",
         ),
       );
-    }
+      if (!isClean(state)) {
+        rest.append(
+          verb("Stage this change", () => {
+            const next = stage(world, path);
+            graph.sendObject(`file:${path}`, "index", "inside");
+            // At the blob it just became, not at the compartment: a note
+            // beside the wrong object reads as being about the wrong object.
+            act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
+          }),
+        );
+      }
+      if (state.modified || state.untracked) {
+        rest.append(
+          verb(
+            "Discard my change",
+            () => {
+              act(
+                discard(world, path),
+                "files",
+                `Discarded your changes to ${path}. That one is gone.`,
+              );
+            },
+            true,
+          ),
+        );
+      }
+    };
+
+    text.addEventListener("input", () => {
+      apply(edit(world, path, text.value));
+      refresh();
+    });
+    body.append(text, rest);
+    refresh();
   }
 
   // A blob is already inside .git, which is exactly why unstaging is cheap
@@ -240,6 +253,27 @@ export function start(): void {
   // The index seals into a snapshot, so its inspector is where a commit is
   // made: the verb lives on the thing it acts on, not in a toolbar.
   function inspectIndex(body: HTMLElement): void {
+    const merging = world.merging;
+    if (merging !== undefined) {
+      body.append(
+        line(
+          merging.conflicts.length === 0
+            ? `Merging ${merging.name}. Commit to seal it, with two parents.`
+            : `Merging ${merging.name}. Resolve the conflict, stage it, then ` +
+              "commit. The verbs are the ones you already know.",
+          "state",
+        ),
+      );
+      body.append(
+        verb(
+          "Abandon this merge",
+          () => {
+            act(abortMerge(world), "index", `Abandoned the merge of ${merging.name}.`);
+          },
+          true,
+        ),
+      );
+    }
     if (Object.keys(world.index).length === 0) return;
     const message = document.createElement("input");
     message.type = "text";
@@ -282,13 +316,32 @@ export function start(): void {
         }),
       );
       for (const other of Object.keys(world.local.refs)) {
-        if (!canFastForward(world, other)) continue;
+        if (other === name) continue;
+        if (canFastForward(world, other)) {
+          body.append(
+            verb(`Merge ${other} into this`, () => {
+              act(
+                merge(world, other),
+                `local:ref:${name}`,
+                `Nothing to merge: ${name} moved forward to ${other}.`,
+              );
+            }),
+          );
+          continue;
+        }
+        // Diverged: a real merge, which may land in a conflicted state. That
+        // state is reached by the same button, because it is the same verb.
+        const next = startMerge(world, other);
+        if (next === world) continue;
         body.append(
           verb(`Merge ${other} into this`, () => {
+            const conflicts = next.merging?.conflicts ?? [];
             act(
-              merge(world, other),
-              `local:ref:${name}`,
-              `Nothing to merge: ${name} just moved forward to ${other}.`,
+              next,
+              conflicts.length === 0 ? `local:ref:${name}` : `file:${conflicts[0] ?? ""}`,
+              conflicts.length === 0
+                ? `Merged ${other}. Commit it to seal the two parents.`
+                : `${String(conflicts.length)} file both of you changed. Open it.`,
             );
           }),
         );
@@ -326,15 +379,33 @@ export function start(): void {
   // The other machine. Only two verbs reach it, and they are the only two in
   // the whole piece that cross the gap.
   function inspectServer(body: HTMLElement): void {
-    if (canPush(world)) {
+    if (headOid(world.local) !== undefined) {
       body.append(
         verb("Push to the server", () => {
-          const next = push(world);
+          if (!canPush(world)) {
+            // The refusal is the lesson, so it is explained rather than
+            // prevented: a greyed-out button teaches nothing.
+            act(
+              world,
+              "server",
+              "Refused: the server has a commit you do not. Fetch first.",
+            );
+            return;
+          }
           graph.sendObject("git", "server", "network");
-          act(next, "server", "Pushed. The server now has the same commits.");
+          act(push(world), "server", "Pushed. The server has the same commits.");
         }),
       );
     }
+    body.append(
+      verb("A teammate pushes a change", () => {
+        act(
+          teammatePushes(world, "README.md", TEAMMATE, "their change"),
+          "server",
+          "Someone else pushed while you were working.",
+        );
+      }),
+    );
     if (headOid(world.remote) !== undefined) {
       body.append(
         verb("Fetch from the server", () => {

@@ -4,6 +4,7 @@
 // either viewport, with every entity open or closed.
 
 import { hueFor } from "../git/hash.js";
+import type { Commit } from "../git/objects.js";
 import { ancestry, readCommit } from "../git/objects.js";
 import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
@@ -345,9 +346,18 @@ function placeCommits(
 ): Placed {
   const repo = world[repoOf];
   const head = headOid(repo);
-  const chain =
-    head === undefined ? [] : [...ancestry(repo.objects, head)].reverse();
-  if (chain.length === 0) {
+  // Every tip, not only HEAD. A diverged history is two lines, and a line that
+  // is not drawn is exactly the thing a refused push is trying to point at.
+  const seen = new Set<string>();
+  const lanes: Commit[][] = [];
+  for (const tip of [...(head === undefined ? [] : [head]),
+    ...Object.values(repo.refs)]) {
+    const line = ancestry(repo.objects, tip).filter((c) => !seen.has(c.oid));
+    if (line.length === 0) continue;
+    for (const c of line) seen.add(c.oid);
+    lanes.push(line);
+  }
+  if (lanes.length === 0) {
     return {
       nodes: [],
       links: [],
@@ -371,11 +381,32 @@ function placeCommits(
   const deep = Math.max(1, ...[...pinned.values()].map((n) => n.length));
   const chipStep = m.chip.h + 4;
   const commitRow = content.y + deep * chipStep + 6;
-  const span = Math.max(0, chain.length - 1) * m.pitch;
+  // A lane carries its own chip stack, so lanes are spaced by the whole of it.
+  const laneStep = deep * chipStep + m.commit + 8;
+
+  // How many commits a commit can reach, minus itself: a child always reaches
+  // more than its parent, so this orders left to right with no sorting.
+  const column = (oid: string): number =>
+    ancestry(repo.objects, oid).length - 1;
+  const widest = Math.max(
+    ...lanes.flat().map((c) => column(c.oid)),
+  );
+  const span = widest * m.pitch;
   const left = content.x + Math.max(0, (content.w - span - m.commit) / 2);
 
-  for (const [i, c] of chain.entries()) {
+  const at = new Map<string, { x: number; y: number }>();
+  for (const [lane, line] of lanes.entries()) {
+    for (const c of line) {
+      at.set(c.oid, {
+        x: left + column(c.oid) * m.pitch,
+        y: commitRow + lane * laneStep,
+      });
+    }
+  }
+
+  for (const c of lanes.flat()) {
     const id = `${repoOf}:commit:${c.oid}`;
+    const spot = at.get(c.oid) as { x: number; y: number };
     nodes.push(
       node({
         id,
@@ -383,12 +414,7 @@ function placeCommits(
         title: c.message,
         glyph: c.oid,
         hue: hueFor(c.oid),
-        box: {
-          x: left + i * m.pitch,
-          y: commitRow,
-          w: m.commit,
-          h: m.commit,
-        },
+        box: { x: spot.x, y: spot.y, w: m.commit, h: m.commit },
         parent: repoOf === "local" ? "git" : "server",
       }),
     );
@@ -402,10 +428,9 @@ function placeCommits(
     }
   }
 
-  const at = new Map(chain.map((c, i) => [c.oid, left + i * m.pitch]));
   for (const [oid, names] of pinned) {
-    const x = at.get(oid);
-    if (x === undefined) continue;
+    const spot = at.get(oid);
+    if (spot === undefined) continue;
     for (const [row, name] of names.entries()) {
       const id = `${repoOf}:ref:${name}`;
       nodes.push(
@@ -414,9 +439,9 @@ function placeCommits(
           kind: "chip",
           title: repoOf === "remote" ? `origin/${name}` : name,
           box: {
-            x: x + m.commit / 2 - m.chip.w / 2,
+            x: spot.x + m.commit / 2 - m.chip.w / 2,
             // Nearest the commit last, so the stack reads downward onto it.
-            y: commitRow - 6 - (names.length - row) * chipStep,
+            y: spot.y - 6 - (names.length - row) * chipStep,
             w: m.chip.w,
             h: m.chip.h,
           },
@@ -431,7 +456,7 @@ function placeCommits(
   return {
     nodes,
     links,
-    height: deep * chipStep + 6 + m.commit + 16,
+    height: deep * chipStep + 6 + m.commit + 16 + (lanes.length - 1) * laneStep,
   };
 }
 

@@ -4,6 +4,7 @@
 
 import type { ObjectStore } from "./objects.js";
 import { blob, commit, put, readTree, tree } from "./objects.js";
+import type { Merging } from "./merge.js";
 
 // Detached HEAD is a real state the explainer reaches (checking out a commit),
 // so it is in the type rather than special-cased later.
@@ -22,6 +23,9 @@ export interface World {
   readonly index: Readonly<Record<string, string>>; // path -> blob oid
   readonly local: Repo;
   readonly remote: Repo;
+  // Set only while a merge is half-done. A state, not an error: every other
+  // verb keeps working, and the same commit verb finishes it.
+  readonly merging?: Merging;
 }
 
 export function emptyRepo(): Repo {
@@ -101,16 +105,19 @@ export function discard(world: World, path: string): World {
 // detached HEAD pointing at the new commit.
 export function commitIndex(world: World, message: string): World {
   const parent = headOid(world.local);
+  // A merge commit has two parents, and that is the entire visual explanation
+  // of a merge: two lines converging into one circle.
+  const parents = [
+    ...(parent === undefined ? [] : [parent]),
+    ...(world.merging === undefined ? [] : [world.merging.theirs]),
+  ];
   const snapshot = tree(world.index);
-  const sealed = commit({
-    tree: snapshot.oid,
-    parents: parent === undefined ? [] : [parent],
-    message,
-  });
+  const sealed = commit({ tree: snapshot.oid, parents, message });
   const objects = put(world.local.objects, snapshot, sealed);
   const head = world.local.head;
+  const { merging: _done, ...rest } = world;
   return {
-    ...world,
+    ...rest,
     local: {
       objects,
       refs:

@@ -3,6 +3,7 @@ import type { Box, LayoutName, SceneNode } from "../src/graph/layout.js";
 import { FRAME_IDS, TARGET, layout } from "../src/graph/layout.js";
 import type { World } from "../src/git/repo.js";
 import { commitIndex, edit, emptyWorld, stage } from "../src/git/repo.js";
+import { fetch, push, teammatePushes } from "../src/git/remote.js";
 
 // Both viewports are marked in full, so neither is a fallback for the other,
 // and every entity can be open or closed. That is 32 pictures per viewport,
@@ -162,11 +163,29 @@ describe.each(VIEWPORTS)("the picture at %s", (name) => {
 describe("the commit chain", () => {
   const scene = layout(busyWorld(), new Set(["laptop", "git"]), "wide");
 
+  // Emission order is by lane now that a diverged history draws two of them,
+  // so the claim is about the drawing: a child is always right of its parent.
   it("runs oldest to newest, left to right", () => {
-    const xs = scene.nodes
-      .filter((n) => n.kind === "commit")
-      .map((n) => n.box.x);
-    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    const x = (id: string): number =>
+      scene.nodes.find((n) => n.id === id)?.box.x ?? 0;
+    for (const link of scene.links.filter((l) => l.kind === "parent")) {
+      expect(x(link.to)).toBeGreaterThan(x(link.from));
+    }
+  });
+
+  // The whole lesson of a refused push is that the server holds a commit you
+  // do not. If only HEAD's own line is drawn, that commit is invisible.
+  it("draws every tip, not only the one HEAD is on", () => {
+    const world = fetch(
+      teammatePushes(push(busyWorld()), "README.md", "theirs", "theirs"),
+    );
+    const scene = layout(world, new Set(["laptop", "git"]), "wide");
+    const chips = scene.nodes.filter((n) => n.kind === "chip");
+    expect(chips.map((c) => c.title)).toContain("origin/main");
+    const theirs = chips.find((c) => c.title === "origin/main") as SceneNode;
+    const mine = chips.find((c) => c.title === "main") as SceneNode;
+    // Two lanes: their tip is drawn somewhere ours is not.
+    expect(theirs.box.y).not.toBe(mine.box.y);
   });
 
   it("draws a line from each commit to its parent", () => {

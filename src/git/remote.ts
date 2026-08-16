@@ -3,7 +3,7 @@
 // as the same cylinder: pushing is not uploading, it is sending objects the
 // other machine does not have yet.
 
-import { ancestry } from "./objects.js";
+import { ancestry, blob, commit, put, tree } from "./objects.js";
 import type { World } from "./repo.js";
 import { headOid } from "./repo.js";
 import { isAncestor } from "./branch.js";
@@ -76,4 +76,43 @@ export function fetch(world: World): World {
       refs: { ...world.local.refs, [`origin/${name}`]: theirs },
     },
   };
+}
+
+// Someone else, pushing while you were working. It is the only way to reach a
+// refused push, and a refused push is the reason fetch exists at all.
+export function teammatePushes(
+  world: World,
+  path: string,
+  text: string,
+  message: string,
+): World {
+  const name =
+    world.remote.head.kind === "branch" ? world.remote.head.name : "main";
+  const parent = world.remote.refs[name];
+  const content = blob(text);
+  const entries = { ...entriesAt(world.remote, parent), [path]: content.oid };
+  const snapshot = tree(entries);
+  const sealed = commit({
+    tree: snapshot.oid,
+    parents: parent === undefined ? [] : [parent],
+    message,
+  });
+  return {
+    ...world,
+    remote: {
+      objects: put(world.remote.objects, content, snapshot, sealed),
+      refs: { ...world.remote.refs, [name]: sealed.oid },
+      head: { kind: "branch", name },
+    },
+  };
+}
+
+function entriesAt(
+  repo: World["remote"],
+  oid: string | undefined,
+): Readonly<Record<string, string>> {
+  const c = oid === undefined ? undefined : repo.objects[oid];
+  if (c?.kind !== "commit") return {};
+  const snapshot = repo.objects[c.tree];
+  return snapshot?.kind === "tree" ? snapshot.entries : {};
 }

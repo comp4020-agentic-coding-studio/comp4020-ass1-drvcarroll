@@ -233,6 +233,14 @@ text {
   stroke-width: 2;
 }
 
+/* The chain is the argument that a commit points at its parent, so it has to
+   read as a line rather than as the faintest thing on the canvas. */
+.link[data-kind="parent"] {
+  stroke: var(--ink);
+  stroke-width: 2;
+  opacity: 0.35;
+}
+
 .link[data-kind="pin"] {
   stroke: var(--ink);
   stroke-width: 1.5;

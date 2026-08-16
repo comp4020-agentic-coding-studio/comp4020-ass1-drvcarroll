@@ -30,7 +30,7 @@ export function branch(world: World, name: string): World {
 // Writes HEAD's snapshot back out over the files and the index. Every verb
 // that moves HEAD ends here, which is why the picture can never show a branch
 // pointing one way and the files saying another.
-function materialise(world: World): World {
+export function materialise(world: World): World {
   const entries = headEntries(world.local);
   const working: Record<string, string> = {};
   for (const [path, oid] of Object.entries(entries)) {

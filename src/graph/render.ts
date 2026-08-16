@@ -86,11 +86,14 @@ export function createGraph(
     "aria-label": "Your laptop, holding your files, the index and .git, with a git server above it across a network gap",
   });
 
+  // Frames are filled, so they go under the links; a parent line drawn beneath
+  // a compartment's own background is a line nobody ever sees.
+  const frameLayer = el("g", { class: "frames" });
   const linkLayer = el("g", { class: "links" });
   const nodeLayer = el("g", { class: "nodes" });
   const flightLayer = el("g", { class: "flights" });
   const noteLayer = el("g", { class: "notes" });
-  svg.append(linkLayer, nodeLayer, flightLayer, noteLayer);
+  svg.append(frameLayer, linkLayer, nodeLayer, flightLayer, noteLayer);
   container.append(svg);
 
   const groups = new Map<string, SVGGElement>();
@@ -307,17 +310,6 @@ export function createGraph(
       tabindex: "0",
       "aria-label": describe(node),
     });
-    // A hit rect larger than the drawing, so a chip can look like a chip and
-    // still be a 44px target on a phone.
-    const hit = el("rect", {
-      class: "hit",
-      x: String(node.hit.x),
-      y: String(node.hit.y),
-      width: String(node.hit.w),
-      height: String(node.hit.h),
-      fill: "transparent",
-    });
-    group.append(...shapeFor(node), hit, ...textFor(node));
     group.addEventListener("click", () => {
       for (const handler of selectHandlers) handler(node.id);
     });
@@ -328,7 +320,11 @@ export function createGraph(
     });
     if (entering) group.setAttribute("data-entering", "true");
     groups.set(node.id, group);
-    nodeLayer.append(group);
+    (node.kind === "frame" ? frameLayer : nodeLayer).append(group);
+    // One place builds the children, so a node born mid-interaction is drawn
+    // exactly like one that has been re-synced. It was not, and its swatch
+    // came out grey while the same commit on the server had its colour.
+    updateNode(node);
     if (entering) {
       requestAnimationFrame(() => {
         group.removeAttribute("data-entering");
@@ -421,12 +417,17 @@ export function createGraph(
       if (groups.has(node.id)) updateNode(node);
       else addNode(node, !first);
     }
-    // Drawn in scene order, so a frame never paints over what is inside it.
-    nodeLayer.append(
-      ...next.nodes
-        .map((n) => groups.get(n.id))
-        .filter((g): g is SVGGElement => g !== undefined),
-    );
+    // Drawn in scene order, so a frame never paints over what is inside it,
+    // and frames stay under the links: a parent line lives between commits
+    // that sit inside a filled compartment.
+    for (const layer of [frameLayer, nodeLayer]) {
+      layer.append(
+        ...next.nodes
+          .filter((n) => (n.kind === "frame") === (layer === frameLayer))
+          .map((n) => groups.get(n.id))
+          .filter((g): g is SVGGElement => g !== undefined),
+      );
+    }
 
     svg.setAttribute("viewBox", next.viewBox);
     placeLinks();
