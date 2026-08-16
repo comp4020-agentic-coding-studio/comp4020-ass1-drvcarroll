@@ -116,3 +116,45 @@ the plan being wrong:
 
 **Step 13 onward proceeds without waiting on step 12**, since the block is not
 something building can clear.
+
+## Revision pass: the interface, after the model was right
+
+Steps 1–19 built a correct model and drew it. Looking at the result, the
+interface is the weakest part of the piece: entities vanish when they open, the
+palette is a default light theme rather than a considered one, the two prose
+lines sit far from the picture, and the hint says what to do without pointing at
+what to do it to. These steps are the correction, and each ends with the same
+review gate.
+
+- [ ] **20. A considered dark palette.** GitHub's own vocabulary: near-black
+      canvas, light grey borders, one accent blue. Token swap in `:root`, then
+      every rule that assumed a light ground — oid swatches, chips, the note
+      halo, the inspector — re-derived from the new tokens.
+- [ ] **21. Name things properly.** Title and `h1` become "How to GIT: An
+      interactive explainer". "your laptop" becomes "Local Device"; every entity
+      label is capitalised ("Git Server", "Your Files", ".git/index").
+- [ ] **22. One entity per row.** Inside the device: `.git`, then `.git/index`,
+      then `Your Files`, each a full-width row of its own. The change travels
+      upward — files, index, .git, server — and the reading order is the same.
+- [ ] **23. The icon never leaves.** Opening an entity translates its icon to
+      the left of the row and grows the contents box beside it, sharing the row.
+      Closing translates the icon back to the centre while the box shrinks into
+      itself, its vertical borders closing to the middle. Every entity stays
+      trackable, open or closed.
+- [ ] **24. The picture is the page.** Both prose lines leave the visible page;
+      they stay in the DOM, visually hidden, as the accessible mirror and the
+      spec's `data-testid` hooks. The stage fills the rest of the viewport.
+- [ ] **25. The hint points.** The suggestion renders beside the picture,
+      vertically aligned with the entity row it refers to, and gives that entity
+      a pale blue border — the same treatment hover and focus already use.
+- [ ] **26. Undo.** One control that takes back the last interaction, by
+      restoring the world and the open set from before it. Noted as a deliberate
+      exception to "reversal in the subject's own vocabulary": the git verbs keep
+      their own reversals, and this is the escape hatch beneath them.
+- [ ] **27. `PROCESS.md`.** Add what this pass demonstrated: structurally the
+      model held up under revision, and the interface did not. Opus is good at
+      structure and poor at interface across many revisions, so self-reflection
+      stages need to be built into the harness rather than requested.
+- [ ] **28. `CLAUDE.md`.** A reflective phase after every step, assessed against
+      the assignment specification, general UI principles and design practice,
+      usability metrics, and colour theory.
