@@ -33,13 +33,13 @@ things are settled in the visitor's head before any git vocabulary arrives.
 
 ## Steps
 
-- [ ] **1. Clear the ground.** Delete `src/dns/`, `src/sim/{engine,metrics,
+- [x] **1. Clear the ground.** Delete `src/dns/`, `src/sim/{engine,metrics,
       topology,types}.ts`, `src/graph/animate.ts`, `src/ui/{readouts,records,
       spotlight}.ts`, and the dead spec suites. Move `src/sim/rng.ts` to
       `src/git/hash.ts`. Stub `src/ui/app.ts`. Rewrite `index.html` to the new
       skeleton with no transport controls. Cut `spec/assignment-1.test.ts` and
       `spec/page.test.ts` to the minimum that passes.
-- [ ] **2. The object model.** `src/git/objects.ts` and `spec/objects.test.ts`.
+- [x] **2. The object model.** `src/git/objects.ts` and `spec/objects.test.ts`.
       Blobs, trees, commits, content-addressed oids. Headless. Same content is
       one blob; a commit's oid includes its parents, so rebase producing new
       hashes falls out of the model rather than out of a caption.
