@@ -43,7 +43,7 @@ things are settled in the visitor's head before any git vocabulary arrives.
       Blobs, trees, commits, content-addressed oids. Headless. Same content is
       one blob; a commit's oid includes its parents, so rebase producing new
       hashes falls out of the model rather than out of a caption.
-- [ ] **3. Stores, status, stage, commit.** `src/git/repo.ts`,
+- [x] **3. Stores, status, stage, commit.** `src/git/repo.ts`,
       `src/git/status.ts`, `spec/repo.test.ts`. Status is derived, never stored.
       Still headless.
 Steps 4 and 5 recreate `src/graph/layout.ts` and `src/graph/render.ts`, which
