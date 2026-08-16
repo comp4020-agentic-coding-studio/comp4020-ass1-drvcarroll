@@ -41,7 +41,8 @@ import { glyphFor, isClean, status, statusFor } from "../git/status.js";
 import { STASH, pop, stash } from "../git/stash.js";
 import { hueFor } from "../git/hash.js";
 import { durationFor } from "./motion.js";
-import { record, suggested } from "./stages.js";
+import type { Control } from "./stages.js";
+import { allowed, record, suggested } from "./stages.js";
 
 // One sentence per panel, said beside it on hover and read out the moment the
 // visitor's attention (or a screen reader) lands there.
@@ -70,11 +71,6 @@ const PANEL_TITLE: Record<string, string> = {
 // Top to bottom, matching the direction a change travels: out of your files,
 // into the index, into .git, and only then across the network gap.
 const PANEL_ORDER = ["server", "git", "index", "files"] as const;
-
-// What Gary appends. He does not invent a file: he takes whichever one you just
-// pushed and adds a line to it, which is why merging his work is a real merge
-// and why touching that file yourself produces a real conflict.
-const GARY_LINE = "hi, my name is gary!\n";
 
 // The order the tour introduces the entities, bottom to top: the direction a
 // change actually travels, and the direction the arrows already point.
@@ -129,18 +125,6 @@ export function start(): void {
     undo();
   });
   document.body.append(undoButton);
-
-  // Start over sits beside Undo rather than inside .git: it belongs to the whole
-  // page, and a verb that resets everything is not a thing .git does.
-  const resetButton = document.createElement("button");
-  resetButton.type = "button";
-  resetButton.className = "verb take-back start-again";
-  resetButton.textContent = "Start over";
-  resetButton.addEventListener("click", () => {
-    forgetGary();
-    act(start_, "files", "Back to the beginning.");
-  });
-  document.body.append(resetButton);
 
   // The tour's one control. It advances nothing in the model - it only names the
   // next entity - and it is gone the moment the last one has been named. It
@@ -266,26 +250,41 @@ export function start(): void {
     }
   }
 
-  // Gary. The other person in the story, standing outside the server's left
-  // border because he is not part of your machine and never was. He is the
-  // reason push can be refused, and a named figure earns that far better than a
-  // button labelled "a teammate pushes a change" ever did.
-  const gary = document.createElement("div");
-  gary.className = "actor";
-  gary.dataset["actor"] = "gary";
-  gary.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-    '<circle cx="12" cy="8" r="4" />' +
-    '<path d="M4 22a8 8 0 0 1 16 0z" />' +
-    "</svg>";
-  const garyName = document.createElement("p");
-  garyName.className = "actor-name";
-  garyName.textContent = "Gary";
-  gary.append(garyName);
-  panels.get("server")?.append(gary);
-  // Registered as a flight endpoint so a commit can be seen leaving him. The
-  // same map sendObject already reads, rather than a second one beside it.
-  bodies.set("teammate", gary);
+  // The people you are not. Three of them so "a teammate pushes" reads as a
+  // team rather than one scripted rival, standing outside the server's left
+  // border because none of them is part of your machine and never was. They
+  // take turns - one push per turn, in the same top-to-bottom order they are
+  // drawn in - rather than all three replying at once, which is what keeps
+  // "your next push is refused" a single clear lesson instead of a pile-up.
+  const TEAMMATE_NAMES = ["Gary", "Bonnie", "Clyde"] as const;
+
+  function makeActor(name: string, index: number): HTMLElement {
+    const actor = document.createElement("div");
+    actor.className = "actor";
+    actor.dataset["actor"] = name.toLowerCase();
+    actor.style.setProperty("--actor-index", String(index));
+    actor.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<circle cx="12" cy="8" r="4" />' +
+      '<path d="M4 22a8 8 0 0 1 16 0z" />' +
+      "</svg>";
+    const label = document.createElement("p");
+    label.className = "actor-name";
+    label.textContent = name;
+    actor.append(label);
+    panels.get("server")?.append(actor);
+    return actor;
+  }
+
+  const teammates = TEAMMATE_NAMES.map((name, index) => ({
+    name,
+    el: makeActor(name, index),
+  }));
+  // Registered as flight endpoints so a commit can be seen leaving whichever
+  // teammate sent it. The same map sendObject already reads, rather than a
+  // second one beside it.
+  for (const mate of teammates) bodies.set(`teammate:${mate.name}`, mate.el);
+  let teammateTurn = 0;
 
   let garyTimer: number | undefined;
   function forgetGary(): void {
@@ -293,10 +292,16 @@ export function start(): void {
     garyTimer = undefined;
   }
 
-  // Whichever file your last commit actually changed: Gary adds his line to
-  // that one, so his work lands on top of yours and collides properly if you
-  // touch it again. Nothing invented, nothing special-cased to README.
-  function garyTarget(w: World): { path: string; text: string } | undefined {
+  const lineFor = (name: string): string => `hi, my name is ${name.toLowerCase()}!\n`;
+
+  // Whichever file your last commit actually changed: the teammate adds their
+  // line to that one, so their work lands on the file you care about and
+  // collides properly if you touch it again. Nothing invented, nothing
+  // special-cased to README.
+  function teammateTarget(
+    w: World,
+    name: string,
+  ): { path: string; text: string } | undefined {
     const head = headOid(w.remote);
     if (head === undefined) return undefined;
     const c = w.remote.objects[head];
@@ -308,27 +313,36 @@ export function start(): void {
     if (path === undefined) return undefined;
     const oid = now[path];
     const held = oid === undefined ? undefined : w.remote.objects[oid];
-    const text = held?.kind === "blob" ? held.text : "";
-    return { path, text: text + GARY_LINE };
+    const text = (held?.kind === "blob" ? held.text : "") + lineFor(name);
+    return { path, text };
   }
 
   // Two seconds after every push of yours, not once: the refusal it causes is
-  // the lesson, and a lesson you meet once is a cutscene.
+  // the lesson, and a lesson you meet once is a cutscene. Only the next
+  // teammate in line replies - never more than one at a time.
   function garyReplies(): void {
     forgetGary();
     const wait = durationFor("network") === 0 ? 0 : 2000;
     garyTimer = window.setTimeout(() => {
       garyTimer = undefined;
-      const target = garyTarget(world);
+      const mate = teammates[teammateTurn % teammates.length];
+      if (mate === undefined) return;
+      const target = teammateTarget(world, mate.name);
       if (target === undefined) return;
-      gary.dataset["acting"] = "true";
-      setTimeout(() => delete gary.dataset["acting"], durationFor("network"));
-      sendObject("teammate", "server", "network");
+      teammateTurn += 1;
+      mate.el.dataset["acting"] = "true";
+      setTimeout(() => delete mate.el.dataset["acting"], durationFor("network"));
+      sendObject(`teammate:${mate.name}`, "server", "network");
       act(
-        teammatePushes(world, target.path, target.text, "hi from gary"),
+        teammatePushes(
+          world,
+          target.path,
+          target.text,
+          `hi from ${mate.name.toLowerCase()}`,
+        ),
         "server",
-        `Gary pushed a change to ${target.path}. Your next push will be ` +
-          "refused, because the server now holds work you do not.",
+        `${mate.name} pushed a change to ${target.path}. Your next push ` +
+          "will be refused, because the server now holds work you do not.",
       );
     }, wait);
   }
@@ -339,12 +353,17 @@ export function start(): void {
   const commitButton = document.createElement("button");
   commitButton.type = "button";
   commitButton.className = "panel-action";
+  commitButton.dataset["control"] = "commit";
   commitButton.textContent = "Commit";
   commitButton.addEventListener("click", () => {
     if (Object.keys(world.index).length === 0) return;
     const text = draft.trim() || "a change";
-    draft = "";
     const next = commitIndex(world, text);
+    if (next === world) {
+      say("Still conflicted. Resolve it in Your Files, then Save, then Commit.");
+      return;
+    }
+    draft = "";
     sendObject("index", "git", "inside");
     act(next, "git", `Committed: ${text}.`);
   });
@@ -354,6 +373,7 @@ export function start(): void {
   const pullButton = document.createElement("button");
   pullButton.type = "button";
   pullButton.className = "panel-action";
+  pullButton.dataset["control"] = "pull";
   pullButton.textContent = "Pull";
   pullButton.addEventListener("click", () => {
     if (headOid(world.remote) === undefined) return;
@@ -363,6 +383,7 @@ export function start(): void {
   const pushButton = document.createElement("button");
   pushButton.type = "button";
   pushButton.className = "panel-action";
+  pushButton.dataset["control"] = "push";
   pushButton.textContent = "Push";
   pushButton.addEventListener("click", () => {
     if (headOid(world.local) === undefined) return;
@@ -389,6 +410,7 @@ export function start(): void {
   const branchButton = document.createElement("button");
   branchButton.type = "button";
   branchButton.className = "panel-action";
+  branchButton.dataset["control"] = "branch";
   branchButton.textContent = "Branch";
   branchButton.addEventListener("click", () => {
     naming = !naming;
@@ -401,6 +423,7 @@ export function start(): void {
   const saveButton = document.createElement("button");
   saveButton.type = "button";
   saveButton.className = "panel-action";
+  saveButton.dataset["control"] = "save";
   saveButton.textContent = "Save";
   saveButton.addEventListener("click", () => {
     if (selectedFile === undefined) return;
@@ -414,6 +437,7 @@ export function start(): void {
   const stashButton = document.createElement("button");
   stashButton.type = "button";
   stashButton.className = "panel-action";
+  stashButton.dataset["control"] = "stash";
   stashButton.textContent = "Put aside";
   stashButton.addEventListener("click", () => {
     act(
@@ -425,9 +449,15 @@ export function start(): void {
   const popButton = document.createElement("button");
   popButton.type = "button";
   popButton.className = "panel-action";
+  popButton.dataset["control"] = "stash";
   popButton.textContent = "Bring it back";
   popButton.addEventListener("click", () => {
-    act(pop(world), "files", "Your work is back in your files.");
+    const next = pop(world);
+    if (next === world) {
+      say("Not while you have unsaved changes. Commit them, or save them first.");
+      return;
+    }
+    act(next, "files", "Your work is back in your files.");
   });
   actions.get("files")?.append(stashButton, popButton, saveButton);
 
@@ -437,6 +467,7 @@ export function start(): void {
   fileList.className = "file-list";
   const editor = document.createElement("textarea");
   editor.className = "file-editor";
+  editor.dataset["control"] = "files";
   editor.dataset["testid"] = "file-editor";
   editor.addEventListener("input", () => {
     if (selectedFile === undefined) return;
@@ -452,7 +483,30 @@ export function start(): void {
     renderIndex();
     renderGit();
     renderServer();
+    lock();
   };
+
+  // Two different reasons a control can be dead: the model makes it impossible,
+  // and the stage did not name it. Render marks the first with data-off, this
+  // folds both into disabled, so the only writer of disabled is here and the
+  // two can never quietly undo each other.
+  function lock(): void {
+    const may = phase === "tour" ? new Set<Control>() : allowed(met);
+    for (const el of stage_.querySelectorAll<HTMLElement>("[data-control]")) {
+      const named_ = el.dataset["control"] as Control;
+      const off = el.hasAttribute("data-off") || !(may === undefined || may.has(named_));
+      el.toggleAttribute("data-locked", off);
+      if (
+        el instanceof HTMLButtonElement ||
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement
+      ) {
+        el.disabled = off;
+      } else {
+        el.setAttribute("aria-disabled", String(off));
+      }
+    }
+  }
 
   const say = (text: string): void => {
     if (said !== null) said.textContent = text;
@@ -561,10 +615,18 @@ export function start(): void {
     say(told);
   }
 
-  function verb(label: string, run: () => void, undoLike = false): HTMLButtonElement {
+  // Every verb declares which control it is, so lock() can reach the ones built
+  // per redraw as surely as the fixed ones in the panel headers.
+  function verb(
+    label: string,
+    control: Control,
+    run: () => void,
+    undoLike = false,
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "verb";
+    button.dataset["control"] = control;
     if (undoLike) button.dataset["undo"] = "";
     button.textContent = label;
     button.addEventListener("click", run);
@@ -604,10 +666,13 @@ export function start(): void {
       glyph.textContent = g;
       item.append(glyph);
       item.dataset["testid"] = "file-item";
+      item.dataset["control"] = "files";
       if (s.path === selectedFile) item.setAttribute("aria-current", "true");
+      // A list item cannot be disabled, so it reads the lock itself.
       item.addEventListener("click", () => {
+        if (item.hasAttribute("data-locked")) return;
         selectedFile = s.path;
-        renderFiles();
+        redraw();
       });
       fileList.append(item);
     }
@@ -615,7 +680,7 @@ export function start(): void {
     const text =
       selectedFile === undefined ? "" : (world.working[selectedFile] ?? "");
     if (editor.value !== text) editor.value = text;
-    editor.disabled = selectedFile === undefined;
+    editor.toggleAttribute("data-off", selectedFile === undefined);
     editor.setAttribute(
       "aria-label",
       selectedFile === undefined ? "No file selected" : `Contents of ${selectedFile}`,
@@ -642,6 +707,7 @@ export function start(): void {
       body.append(
         verb(
           "Abandon this merge",
+          "merge",
           () => {
             act(abortMerge(world), "index", `Abandoned the merge of ${merging.name}.`);
           },
@@ -652,10 +718,13 @@ export function start(): void {
     const entries = Object.entries(world.index).sort(([a], [b]) => a.localeCompare(b));
     if (entries.length === 0) {
       body.append(line("Nothing staged.", "empty"));
-      commitButton.disabled = true;
+      commitButton.toggleAttribute("data-off", true);
       return;
     }
-    commitButton.disabled = false;
+    commitButton.toggleAttribute(
+      "data-off",
+      merging?.conflicts.some((path) => world.index[path] === undefined) ?? false,
+    );
     const list = document.createElement("ul");
     list.className = "blob-list";
     for (const [path, oid] of entries) {
@@ -669,6 +738,7 @@ export function start(): void {
       item.append(
         verb(
           "Unstage",
+          "save",
           () => {
             act(unstage(world, path), "files", `Unstaged ${path}.`);
           },
@@ -681,6 +751,7 @@ export function start(): void {
     const message = document.createElement("input");
     message.type = "text";
     message.className = "message";
+    message.dataset["control"] = "commit";
     message.placeholder = "what this change does";
     message.setAttribute("aria-label", "Commit message");
     message.value = draft;
@@ -702,6 +773,9 @@ export function start(): void {
     const seen = new Set<string>();
     const commits = head === undefined ? [] : ancestry(world.local.objects, head);
     for (const c of commits) seen.add(c.oid);
+    // Off-HEAD is not the same as unreachable: a fetched origin/* tip or
+    // another branch's commit is live, just not on the branch you're on.
+    const trueGhosts = new Set(unreachable(world));
     const ghosts = Object.values(world.local.objects)
       .filter((o) => o.kind === "commit" && !seen.has(o.oid))
       .reverse();
@@ -722,7 +796,9 @@ export function start(): void {
       }
       for (const o of ghosts) {
         if (o.kind !== "commit") continue;
-        list.append(commitRow(o.oid, o.message, o.parents, pinned.get(o.oid), true));
+        list.append(
+          commitRow(o.oid, o.message, o.parents, pinned.get(o.oid), trueGhosts.has(o.oid)),
+        );
       }
       body.append(list);
     }
@@ -770,6 +846,7 @@ export function start(): void {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "ref-chip";
+      chip.dataset["control"] = "checkout";
       chip.textContent = name;
       chip.setAttribute("aria-label", `Move onto ${name}`);
       chip.addEventListener("click", () => {
@@ -786,15 +863,19 @@ export function start(): void {
       item.append(chip);
     }
     if (ghost && unreachable(world).includes(oid)) {
-      item.append(
-        verb(
-          "Point this branch back here",
-          () => {
-            act(resetTo(world, oid), "git", "Back on the old line. The replayed ones are unreachable now.");
-          },
-          true,
-        ),
-      );
+      const back = resetTo(world, oid);
+      if (back !== world) {
+        item.append(
+          verb(
+            "Point this branch back here",
+            "reset",
+            () => {
+              act(back, "git", "Back on the old line. The replayed ones are unreachable now.");
+            },
+            true,
+          ),
+        );
+      }
     }
     void parents;
     return item;
@@ -817,6 +898,7 @@ export function start(): void {
       const named = document.createElement("input");
       named.type = "text";
       named.className = "message";
+      named.dataset["control"] = "branch";
       named.placeholder = "new branch name";
       named.setAttribute("aria-label", "New branch name");
       named.value = branchName;
@@ -825,7 +907,7 @@ export function start(): void {
       });
       wrap.append(
         named,
-        verb("Start a branch here", () => {
+        verb("Start a branch here", "branch", () => {
           const to = branchName.trim() || "feature";
           branchName = "";
           naming = false;
@@ -839,23 +921,30 @@ export function start(): void {
         if (other === current) continue;
         if (canFastForward(world, other)) {
           wrap.append(
-            verb(`Merge ${other} into ${current}`, () => {
+            verb(`Merge ${other} into ${current}`, "merge", () => {
               act(merge(world, other), "git", `Nothing to merge: ${current} moved forward to ${other}.`);
             }),
           );
           continue;
         }
         if (phase === "open" && canRebase(world, other)) {
-          wrap.append(
-            verb(`Replay ${current} onto ${other}`, () => {
-              act(rebase(world, other), "git", "Same changes, new hashes. The old ones are still in .git.");
-            }),
-          );
+          // canRebase only checks direction, not content: a conflicting
+          // replay is refused whole by rebase() itself, so check the result
+          // before offering the button - otherwise a real conflict shows a
+          // false "done" message over a screen that did not change.
+          const replayed = rebase(world, other);
+          if (replayed !== world) {
+            wrap.append(
+              verb(`Replay ${current} onto ${other}`, "rebase", () => {
+                act(replayed, "git", "Same changes, new hashes. The old ones are still in .git.");
+              }),
+            );
+          }
         }
         const next = startMerge(world, other);
         if (next === world) continue;
         wrap.append(
-          verb(`Merge ${other} into ${current}`, () => {
+          verb(`Merge ${other} into ${current}`, "merge", () => {
             const conflicts = next.merging?.conflicts ?? [];
             act(
               next,
@@ -868,15 +957,19 @@ export function start(): void {
         );
       }
       if (phase === "open" && headOid(world.local) !== undefined) {
-        wrap.append(
-          verb(
-            "Move the branch back",
-            () => {
-              act(resetBack(world), "git", `Moved ${current} back. The commit is still in .git.`);
-            },
-            true,
-          ),
-        );
+        const back = resetBack(world);
+        if (back !== world) {
+          wrap.append(
+            verb(
+              "Move the branch back",
+              "reset",
+              () => {
+                act(back, "git", `Moved ${current} back. The commit is still in .git.`);
+              },
+              true,
+            ),
+          );
+        }
       }
     }
 
@@ -920,8 +1013,8 @@ export function start(): void {
     body.append(list);
   }
 
-  // Suggests, never gates: every legal action stays available whatever this
-  // line happens to be saying, and it retires once nothing is left to show.
+  // The instruction and the lock read the same stage, so what the line names is
+  // exactly what lock() leaves live. Both retire when the stages run out.
   function nextPrompt(): void {
     if (phase === "tour") return; // the tour writes its own copy
     const next = suggested(met);

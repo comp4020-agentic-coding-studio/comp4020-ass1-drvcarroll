@@ -178,9 +178,15 @@ h1 {
   inset-inline-end: 100%;
   top: 50%;
   z-index: 1;
-  width: 15vw;
+
+  /* The gutter is 15vw wide, but the screen around .stage eats into that
+     margin on both sides - sizing this to the full 15vw left nothing between
+     the text and the edge of the viewport, so long prompts clipped off the
+     left of the screen instead of wrapping inside it. */
+  width: calc(15vw - 1.25rem);
   padding-inline-end: 0.9rem;
   text-align: end;
+  overflow-wrap: break-word;
   transform: translateY(-50%);
 }
 
@@ -261,15 +267,18 @@ h1 {
 
 /* The two panels with something in them worth reading: a whole history, and an
    editor. They take any height the other two leave over. */
-.panel[data-panel="files"],
-.panel[data-panel="git"] {
+.panel[data-panel="files"] {
   flex: 1 1 26vh;
+}
+
+.panel[data-panel="git"] {
+  flex: 1 1 calc(26vh - 50px);
 }
 
 /* A list of names and content ids, and one line to describe the change. It
    needs the least of the four and should not take more than it needs. */
 .panel[data-panel="index"] {
-  flex: 0 1 11vh;
+  flex: 0 1 calc(11vh + 50px);
 }
 
 /* The border a suggestion or a hover both borrow, so pointing at a thing
@@ -287,12 +296,15 @@ h1 {
   top: 50%;
   transform: translateY(-50%);
   z-index: 1;
-  width: 15vw;
+
+  /* Matches .hint's gutter math on the opposite side, for the same reason. */
+  width: calc(15vw - 1.25rem);
   margin: 0;
   padding-inline-start: 0.9rem;
   color: var(--muted);
   font-size: 0.85rem;
   line-height: 1.45;
+  overflow-wrap: break-word;
   opacity: 0;
   pointer-events: none;
   transition: opacity 150ms ease;
@@ -552,6 +564,16 @@ button.ref-chip:focus-visible {
   cursor: default;
 }
 
+/* The walkthrough locks everything the current instruction did not name, so
+   what is not part of this step reads as inert rather than merely unresponsive.
+   Buttons carry :disabled; a list item cannot, so it is styled by the flag. */
+.verb:disabled,
+.ref-chip:disabled,
+[data-locked] {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* The one control that belongs to the whole page rather than to any one panel,
    so it sits in the page's corner and costs the picture no height. Quiet by
    design: an outline, disabled until there is something to take back. */
@@ -588,12 +610,14 @@ button.ref-chip:focus-visible {
   font-weight: 600;
 }
 
-/* Gary, outside the server's left border, because he is not on your machine and
-   never was. The gutter opposite the hover note, so the two never collide. */
+/* The teammates, outside the server's left border, because none of them is on
+   your machine and never was. The gutter opposite the hover note, so the two
+   never collide. Stacked in a column, one per turn order, via --actor-index
+   set once in script when each is created. */
 .actor {
   position: absolute;
   inset-inline-end: calc(100% + 0.7rem);
-  top: 0.75rem;
+  top: calc(0.75rem + var(--actor-index, 0) * 4.75rem);
   width: 3.25rem;
   text-align: center;
   color: var(--muted);
@@ -758,10 +782,11 @@ button.ref-chip:focus-visible {
     transform: none;
   }
 
-  /* Gary comes inside the border too, up in the corner opposite the title. */
+  /* The teammates come inside the border too, stacked in the corner opposite
+     the title rather than spread across a gutter that no longer exists. */
   .actor {
     inset-inline: auto 0.75rem;
-    top: 0.6rem;
+    top: calc(0.6rem + var(--actor-index, 0) * 2rem);
     display: flex;
     gap: 0.35rem;
     align-items: center;

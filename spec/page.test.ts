@@ -113,6 +113,23 @@ const commit = (path: string, text: string, message: string): void => {
   click(named(panel("index"), "Commit"));
 };
 
+// The whole core loop, walked the way the walkthrough now insists it be walked:
+// commit, push, a teammate replies, your own second commit, then the merge that
+// settles it. Nothing past this point is reachable until it has happened, so
+// every later test starts from here rather than from a shortcut through it.
+const core = (): void => {
+  commit("README.md", "changed\n", "explain the readme");
+  click(named(panel("git"), "Push"));
+  vi.advanceTimersByTime(2000);
+  commit("notes.md", "todo\n", "start the notes");
+  click(named(panel("git"), "Pull"));
+  click(named(panel("git"), "Merge origin/main"));
+  const field = panel("index")?.querySelector<HTMLInputElement>(".message");
+  if (field === null || field === undefined) throw new Error("no message");
+  type(field, "merge gary");
+  click(named(panel("index"), "Commit"));
+};
+
 describe("the page boots", () => {
   beforeEach(() => {
     boot();
@@ -186,8 +203,78 @@ describe("the tour introduces one entity at a time", () => {
 
   it("hands over to the curriculum, which asks for a real change", () => {
     tour();
-    expect(hint()).toContain("Change a line");
+    expect(hint()).toContain("Click a file");
     expect(panel("files")?.querySelector("[data-hint-do]")).toBeTruthy();
+  });
+});
+
+// The walkthrough is a lock, not a suggestion: the only things that can be
+// touched are the things the current instruction named. Every control carries
+// the name of the verb it is, so these read the page the way lock() writes it.
+describe("nothing but what the instruction says", () => {
+  const controls = (name: string): HTMLElement[] => [
+    ...document.querySelectorAll<HTMLElement>(`[data-control="${name}"]`),
+  ];
+
+  const dead = (name: string): boolean =>
+    controls(name).length > 0 &&
+    controls(name).every(
+      (el) =>
+        el.hasAttribute("data-locked") &&
+        (!("disabled" in el) || el.disabled === true),
+    );
+
+  const live = (name: string): boolean =>
+    controls(name).some((el) => !el.hasAttribute("data-locked"));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    boot();
+  });
+
+  it("locks the whole page while the tour is still naming things", () => {
+    for (const name of ["files", "save", "commit", "push", "pull"]) {
+      expect(dead(name)).toBe(true);
+    }
+    expect(next()).toBeTruthy(); // the tour's own button is the way out
+  });
+
+  it("opens only the files when the first instruction is to edit one", () => {
+    tour();
+    expect(live("files")).toBe(true);
+    for (const name of ["save", "commit", "push", "pull", "branch"]) {
+      expect(dead(name)).toBe(true);
+    }
+  });
+
+  it("opens Save only once the instruction has moved on to it", () => {
+    tour();
+    expect(dead("save")).toBe(true);
+    pick("README.md");
+    type(editor(), "changed\n");
+    expect(hint()).toContain("Save");
+    expect(live("save")).toBe(true);
+    expect(dead("push")).toBe(true);
+  });
+
+  it("keeps branching shut until the collaboration loop has closed", () => {
+    tour();
+    commit("README.md", "changed\n", "explain the readme");
+    expect(dead("branch")).toBe(true);
+    core();
+    expect(hint()).toContain("Branch");
+    expect(live("branch")).toBe(true);
+    expect(dead("push")).toBe(true);
+  });
+
+  // Reversal is the one thing the lock never takes away: a visitor who cannot
+  // back out of a step stops poking the model.
+  it("leaves Undo alone whatever the instruction says", () => {
+    tour();
+    pick("README.md");
+    type(editor(), "changed\n");
+    const undo = document.querySelector<HTMLButtonElement>(".take-back");
+    expect(undo?.disabled).toBe(false);
   });
 });
 
@@ -214,9 +301,8 @@ describe("the core loop is the only thing on offer at first", () => {
     expect(missing(panel("git"), "Move the branch back")).toBe(true);
   });
 
-  it("keeps the reversals that are not git verbs at page level", () => {
+  it("keeps the reversal that is not a git verb at page level", () => {
     expect(named(document.body, "Undo")).toBeTruthy();
-    expect(named(document.body, "Start over")).toBeTruthy();
   });
 });
 
@@ -334,6 +420,95 @@ describe("Gary, two seconds after every push", () => {
     vi.advanceTimersByTime(2000);
     expect(said()).not.toContain("Gary");
   });
+
+  // The narrative used to dead-end here. Merging a teammate who committed on
+  // top of you is a fast-forward, so no two-parent commit ever formed, so the
+  // merge stage could never be met and the prompt repeated itself forever
+  // however exactly the visitor followed it. The cure is the order of the
+  // lesson: your own second commit is what makes the merge a merge.
+  it("asks for your own second commit before it asks for a merge", () => {
+    vi.advanceTimersByTime(2000);
+    expect(hint()).toContain("Pick another file");
+  });
+
+  it("asks for the merge only once both sides have moved", () => {
+    vi.advanceTimersByTime(2000);
+    commit("notes.md", "todo\n", "start the notes");
+    expect(hint()).toContain("Pull");
+    expect(hint()).toContain("Merge origin/main");
+  });
+
+  it("seals a real two-parent commit, and moves the narrative on", () => {
+    vi.advanceTimersByTime(2000);
+    commit("notes.md", "todo\n", "start the notes");
+    click(named(panel("git"), "Pull"));
+    click(named(panel("git"), "Merge origin/main"));
+    const field = panel("index")?.querySelector<HTMLInputElement>(".message");
+    if (field === null || field === undefined) throw new Error("no message");
+    type(field, "merge gary");
+    click(named(panel("index"), "Commit"));
+    // The stage is met, so the prompt has to have moved off the merge.
+    expect(hint()).not.toContain("merge");
+    expect(named(panel("git"), "Branch")).toBeTruthy();
+  });
+});
+
+// One teammate replies per push, in a fixed rotation, so a refused push is
+// always attributable to exactly one person rather than a pile-up.
+describe("the teammates take turns", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    boot();
+    tour();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("draws all three beside the server, named", () => {
+    for (const name of ["Gary", "Bonnie", "Clyde"]) {
+      const actor = document.querySelector(`[data-actor='${name.toLowerCase()}']`);
+      expect(actor).toBeTruthy();
+      expect(panel("server")?.contains(actor as Node)).toBe(true);
+      expect(actor?.textContent).toContain(name);
+    }
+  });
+
+  it("sends exactly one of them per push, in order", () => {
+    const settle = (path: string, message: string): void => {
+      click(named(panel("git"), "Pull"));
+      const merge = named(panel("git"), "Merge origin/main");
+      if (merge !== null) click(merge);
+      const field = panel("index")?.querySelector<HTMLInputElement>(".message");
+      if (field === null || field === undefined) throw new Error("no message");
+      type(field, message);
+      const commitNow = named(panel("index"), "Commit");
+      if (commitNow !== null) click(commitNow);
+      void path;
+    };
+
+    commit("README.md", "changed\n", "explain the readme");
+    const before = rows("server").length;
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    expect(said()).toContain("Gary");
+    expect(said()).not.toContain("Bonnie");
+    // Exactly one commit arrived, so only one of them pushed.
+    expect(rows("server").length).toBe(before + 2);
+
+    settle("README.md", "merge gary");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    expect(said()).toContain("Bonnie");
+    expect(said()).not.toContain("Gary");
+
+    settle("README.md", "merge bonnie");
+    click(named(panel("git"), "Push"));
+    vi.advanceTimersByTime(2000);
+    expect(said()).toContain("Clyde");
+    expect(said()).not.toContain("Bonnie");
+  });
 });
 
 describe("branches, once they have been earned", () => {
@@ -341,11 +516,7 @@ describe("branches, once they have been earned", () => {
     vi.useFakeTimers();
     boot();
     tour();
-    commit("README.md", "changed\n", "explain the readme");
-    click(named(panel("git"), "Push"));
-    vi.advanceTimersByTime(2000);
-    click(named(panel("git"), "Pull"));
-    click(named(panel("git"), "Merge origin/main"));
+    core();
     vi.useRealTimers();
   });
 
@@ -430,9 +601,11 @@ describe("everything can be taken back", () => {
     expect(rows("git").length).toBe(0);
   });
 
-  it("returns to the world it started in", () => {
+  it("undo can be pressed repeatedly, back to the world it started in", () => {
     commit("README.md", "changed\n", "explain the readme");
-    click(named(document.body, "Start over"));
+    click(named(document.body, "Undo"));
+    click(named(document.body, "Undo"));
+    click(named(document.body, "Undo"));
     expect(rows("git").length).toBe(0);
     expect(panel("index")?.textContent).toContain("Nothing staged");
   });
