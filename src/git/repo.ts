@@ -104,6 +104,15 @@ export function discard(world: World, path: string): World {
 // Seals the index into a snapshot. Moves the branch HEAD is on, or leaves a
 // detached HEAD pointing at the new commit.
 export function commitIndex(world: World, message: string): World {
+  // A conflicted path is deliberately left out of the index by startMerge;
+  // sealing the commit before it is resolved and staged would silently drop
+  // that file from the tree instead of refusing.
+  if (
+    world.merging !== undefined &&
+    world.merging.conflicts.some((path) => world.index[path] === undefined)
+  ) {
+    return world;
+  }
   const parent = headOid(world.local);
   // A merge commit has two parents, and that is the entire visual explanation
   // of a merge: two lines converging into one circle.

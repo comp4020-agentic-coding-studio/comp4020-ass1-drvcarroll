@@ -6,7 +6,7 @@ import { blob, commit, put, readBlob, tree } from "./objects.js";
 import type { World } from "./repo.js";
 import { headOid } from "./repo.js";
 import { materialise } from "./branch.js";
-import { isClean, status } from "./status.js";
+import { isClean, isSettled, status } from "./status.js";
 
 export const STASH = "stash";
 
@@ -44,13 +44,18 @@ export function stash(world: World): World {
 // Reads the stashed snapshot back over your files and drops the name. The
 // commit stays in .git, unreachable, exactly as git leaves it.
 export function pop(world: World): World {
+  // Refuse on a dirty tree: popping over unsaved work would silently
+  // overwrite it, the one loss stash exists to prevent.
+  if (!status(world).every(isSettled)) return world;
   const at = world.local.refs[STASH];
   const held = at === undefined ? undefined : world.local.objects[at];
   if (held?.kind !== "commit") return world;
   const snapshot = world.local.objects[held.tree];
   if (snapshot?.kind !== "tree") return world;
 
-  const working: Record<string, string> = {};
+  // Untracked files survive, exactly as materialise() keeps them: stash only
+  // ever speaks for what it held, not for what showed up since.
+  const working = { ...world.working };
   for (const [path, oid] of Object.entries(snapshot.entries)) {
     working[path] = readBlob(world.local.objects, oid)?.text ?? "";
   }

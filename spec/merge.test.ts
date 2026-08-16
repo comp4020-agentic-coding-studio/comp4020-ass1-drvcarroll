@@ -104,6 +104,23 @@ describe("a conflict is a state, not an error", () => {
     expect(c?.parents).toHaveLength(2);
     expect(fixed.working["README.md"]).toBe("both\n");
   });
+
+  it("refuses to seal the commit while the conflict is still unstaged", () => {
+    const both = commitIndex(
+      stage(edit(diverged(), "README.md", "mine\n"), "README.md"),
+      "mine too",
+    );
+    const merged = startMerge(both, "origin/main");
+    // main.ts merged cleanly and is staged; README.md is the one left out.
+    expect(commitIndex(merged, "too soon")).toEqual(merged);
+  });
+});
+
+describe("starting a merge on a dirty tree", () => {
+  it("is refused, because combine() only reads committed trees", () => {
+    const world = edit(diverged(), "main.ts", "uncommitted\n");
+    expect(startMerge(world, "origin/main")).toEqual(world);
+  });
 });
 
 describe("a file git has never seen", () => {

@@ -7,6 +7,7 @@ import { ancestry, readBlob, readTree } from "./objects.js";
 import type { World } from "./repo.js";
 import { headOid } from "./repo.js";
 import { materialise } from "./branch.js";
+import { isSettled, status } from "./status.js";
 
 export interface Merging {
   readonly name: string; // the branch being merged in
@@ -97,6 +98,10 @@ export function startMerge(world: World, name: string): World {
   if (theirs === undefined || ours === undefined || theirs === ours) {
     return world;
   }
+  // Refuse on a dirty tree, same as merge() and rebase(): combine() reads
+  // only the committed trees, so an uncommitted edit would be silently
+  // overwritten by whatever the merge produces for that path.
+  if (!status(world).every(isSettled)) return world;
   const base = mergeBase(world.local.objects, ours, theirs);
   if (base === undefined) return world;
   const done = combine(world.local.objects, base, ours, theirs, name);

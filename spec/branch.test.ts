@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { branch, canFastForward, checkout, merge, resetBack } from "../src/git/branch.js";
+import {
+  branch,
+  canFastForward,
+  checkout,
+  merge,
+  resetBack,
+  resetTo,
+} from "../src/git/branch.js";
 import { commitIndex, edit, emptyWorld, headOid, stage } from "../src/git/repo.js";
 import { statusFor } from "../src/git/status.js";
 
@@ -102,5 +109,28 @@ describe("moving the branch back is how you undo a commit", () => {
   it("removes the branch entirely when undoing the very first commit", () => {
     const undone = resetBack(committed());
     expect(headOid(undone.local)).toBeUndefined();
+  });
+
+  it("refuses mid-merge, so the merge's own state never goes stale", () => {
+    const second = commitIndex(
+      stage(edit(committed(), "a.txt", "two"), "a.txt"),
+      "second",
+    );
+    const merging = {
+      ...second,
+      merging: { name: "feature", theirs: "0000000", conflicts: [] },
+    };
+    expect(resetBack(merging)).toEqual(merging);
+  });
+});
+
+describe("pointing a branch at an old commit is also blocked mid-merge", () => {
+  it("refuses, for the same reason resetBack does", () => {
+    const world = committed();
+    const merging = {
+      ...world,
+      merging: { name: "feature", theirs: "0000000", conflicts: [] },
+    };
+    expect(resetTo(merging, headOid(world.local) as string)).toEqual(merging);
   });
 });

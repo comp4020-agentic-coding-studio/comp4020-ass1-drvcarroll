@@ -89,7 +89,11 @@ export function canFastForward(world: World, name: string): boolean {
 // with nothing pointing at them.
 export function resetTo(world: World, oid: string): World {
   const head = world.local.head;
-  if (head.kind !== "branch" || readCommit(world.local.objects, oid) === undefined) {
+  if (
+    head.kind !== "branch" ||
+    world.merging !== undefined ||
+    readCommit(world.local.objects, oid) === undefined
+  ) {
     return world;
   }
   return materialise({
@@ -104,7 +108,9 @@ export function resetTo(world: World, oid: string): World {
 export function resetBack(world: World): World {
   const head = world.local.head;
   const at = headOid(world.local);
-  if (head.kind !== "branch" || at === undefined) return world;
+  if (head.kind !== "branch" || at === undefined || world.merging !== undefined) {
+    return world;
+  }
   const [previous] = ancestry(world.local.objects, at)[0]?.parents ?? [];
   const refs = { ...world.local.refs };
   if (previous === undefined) delete refs[head.name];

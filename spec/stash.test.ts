@@ -61,4 +61,15 @@ describe("getting the work back", () => {
     const world = dirty();
     expect(pop(world)).toEqual(world);
   });
+
+  it("refuses over a dirty tree rather than overwriting it", () => {
+    const stashed = stash(dirty());
+    const dirtyAgain = edit(stashed, "README.md", "second half done\n");
+    expect(pop(dirtyAgain)).toEqual(dirtyAgain);
+  });
+
+  it("leaves an untracked file alone", () => {
+    const stashed = edit(stash(dirty()), "scratch.txt", "notes\n");
+    expect(pop(stashed).working["scratch.txt"]).toBe("notes\n");
+  });
 });
