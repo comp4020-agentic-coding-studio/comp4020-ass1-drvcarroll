@@ -6,6 +6,7 @@
 import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
 import { isAncestor } from "../git/branch.js";
+import { STASH } from "../git/stash.js";
 
 export interface Stage {
   readonly id: string;
@@ -17,9 +18,12 @@ export interface Stage {
   met(world: World, start: World): boolean;
 }
 
-// Branches you made, not the remote-tracking names fetch writes for you.
+// Branches you made: not the remote-tracking names fetch writes for you, and
+// not the stash, which is a name for a commit but never a branch you are on.
 function local(world: World): string[] {
-  return Object.keys(world.local.refs).filter((n) => !n.startsWith("origin/"));
+  return Object.keys(world.local.refs).filter(
+    (n) => !n.startsWith("origin/") && n !== STASH,
+  );
 }
 
 function commits(world: World): number {
@@ -91,6 +95,12 @@ export const STAGES: readonly Stage[] = [
       Object.values(world.local.objects).some(
         (o) => o.kind === "commit" && o.parents.length >= 2,
       ),
+  },
+  {
+    id: "stash",
+    teaches: "Stash is a commit off to the side, not a special place.",
+    prompt: "Change a file, then try to check out another branch. Then stash.",
+    met: (world) => Object.keys(world.local.refs).includes(STASH),
   },
   {
     id: "conflict",

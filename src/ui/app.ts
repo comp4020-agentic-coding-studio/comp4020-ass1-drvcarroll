@@ -15,7 +15,8 @@ import {
 import { branch, canFastForward, checkout, merge, resetBack } from "../git/branch.js";
 import { canPush, fetch, push, teammatePushes } from "../git/remote.js";
 import { abortMerge, startMerge } from "../git/merge.js";
-import { isClean, statusFor } from "../git/status.js";
+import { isClean, status, statusFor } from "../git/status.js";
+import { STASH, pop, stash } from "../git/stash.js";
 import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
 import type { Graph } from "../graph/render.js";
@@ -67,6 +68,10 @@ const HEAD_IS =
 const REF_IS =
   "A branch is a name pointing at one commit. Committing moves the name " +
   "forward; nothing is ever copied, which is why branching is instant.";
+
+const STASH_IS =
+  "Work put aside, as a commit that no branch points at. It is not a special " +
+  "place: getting it back is just reading that snapshot over your files.";
 
 const BLOB_IS =
   "The content of a file, named by a hash of that content. It is already " +
@@ -298,6 +303,17 @@ export function start(): void {
       body.append(line(HEAD_IS, "what"));
       return;
     }
+    // A stash is a name for a commit, so it is a chip. It is not a branch you
+    // can be on, so the only thing it offers is the way back.
+    if (name === STASH) {
+      body.append(line(STASH_IS, "what"));
+      body.append(
+        verb("Get this work back", () => {
+          act(pop(world), "files", "Your work is back in your files.");
+        }),
+      );
+      return;
+    }
     body.append(line(REF_IS, "what"));
     const head = world.local.head;
     const onIt = head.kind === "branch" && head.name === name;
@@ -316,7 +332,7 @@ export function start(): void {
         }),
       );
       for (const other of Object.keys(world.local.refs)) {
-        if (other === name) continue;
+        if (other === name || other === STASH) continue;
         if (canFastForward(world, other)) {
           body.append(
             verb(`Merge ${other} into this`, () => {
@@ -368,7 +384,7 @@ export function start(): void {
       verb("Check out this branch", () => {
         const next = checkout(world, name);
         if (next === world) {
-          say("Not while you have unsaved changes. Commit or discard first.");
+          say("Not while you have unsaved changes. Commit them, or put them aside.");
           return;
         }
         act(next, `local:ref:${name}`, `On ${name}. Your files changed to match.`);
@@ -437,6 +453,23 @@ export function start(): void {
       if (what !== undefined) body.append(line(what, "what"));
       if (id === "index") inspectIndex(body);
       if (id === "server") inspectServer(body);
+      // Only once there is a commit to come back to. Before that there is no
+      // wall to be stuck at, and the verb would be a control looking for a job.
+      if (
+        id === "files" &&
+        headOid(world.local) !== undefined &&
+        !status(world).every(isClean)
+      ) {
+        body.append(
+          verb("Put this work aside", () => {
+            act(
+              stash(world),
+              `local:ref:${STASH}`,
+              "Your work is a commit off to the side. Your files are clean.",
+            );
+          }),
+        );
+      }
       if (id === "laptop") {
         body.append(
           verb(

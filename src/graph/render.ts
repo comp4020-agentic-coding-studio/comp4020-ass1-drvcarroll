@@ -106,9 +106,21 @@ export function createGraph(
 
   // Above the object it happened to, pulled back inside the drawing if that
   // would put it off the edge. Feedback that scrolls away is not feedback.
-  function notePlacement(box: Box): string {
+  function notePlacement(box: Box, note?: SVGGElement): string {
     const [x0 = 0, , w = 1000] = scene.viewBox.split(/\s+/).map(Number);
-    const x = Math.min(Math.max(box.x + 4, x0 + 60), x0 + w - 60);
+    // Measured, because a sentence wider than the phone viewport clamped by a
+    // guessed margin still runs off the edge, which is where they were running.
+    // Guarded: jsdom draws nothing, so it measures nothing either.
+    const text = note?.querySelector("text");
+    const measured =
+      typeof text?.getComputedTextLength === "function"
+        ? text.getComputedTextLength()
+        : 0;
+    const half = measured / 2 + 8;
+    const x =
+      2 * half >= w
+        ? x0 + w / 2
+        : Math.min(Math.max(box.x + 4, x0 + half), x0 + w - half);
     return `translate(${String(x)} ${String(Math.max(box.y - 26, 14))})`;
   }
 
@@ -433,7 +445,8 @@ export function createGraph(
     placeLinks();
     for (const [id, note] of notes) {
       const box = boxOf(id);
-      if (box !== undefined) note.setAttribute("transform", notePlacement(box));
+      if (box !== undefined)
+        note.setAttribute("transform", notePlacement(box, note));
     }
     anchor();
   }
@@ -490,14 +503,13 @@ export function createGraph(
       const existing = timers.get(id);
       if (existing !== undefined) clearTimeout(existing);
 
-      const group = el("g", {
-        class: "note",
-        transform: notePlacement(box),
-      });
+      const group = el("g", { class: "note" });
       const label = el("text", { class: "note-text", x: "0", y: "0" });
       label.textContent = text;
       group.append(label);
       noteLayer.append(group);
+      // Placed after appending: the text has no measurable width until then.
+      group.setAttribute("transform", notePlacement(box, group));
       notes.set(id, group);
       timers.set(
         id,

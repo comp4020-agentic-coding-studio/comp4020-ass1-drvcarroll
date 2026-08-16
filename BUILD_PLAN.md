@@ -91,10 +91,10 @@ still the right code, and only the domain around them was wrong.
       public**, which needs a GitHub login this machine does not have: while it
       is private CI stays skipped and Pages 404s. Everything else continues
       around it.
-- [ ] **13. The collaborator, and a refused push.**
-- [ ] **14. Merge with two parents.**
-- [ ] **15. Conflicts.** Resolved with the first two verbs the visitor learned.
-- [ ] **16. Stash.**
+- [x] **13. The collaborator, and a refused push.**
+- [x] **14. Merge with two parents.**
+- [x] **15. Conflicts.** Resolved with the first two verbs the visitor learned.
+- [x] **16. Stash.**
 - [ ] **17. Rebase.** Old commits ghosted, new oids, same content.
 - [ ] **18. Rewrite `STRUCTURE.md`,** naming the simplifications honestly.
 - [ ] **19. Re-push, confirm CI and Pages, final evidence check.**
