@@ -17,6 +17,7 @@ import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
 import type { Graph } from "../graph/render.js";
 import { layout } from "../graph/layout.js";
+import { record, suggestion } from "./stages.js";
 
 // One sentence per entity, saying what it is. Naming the components before the
 // process is what makes the process legible, and an inspector is the right
@@ -38,6 +39,15 @@ const WHAT: Record<string, string> = {
     "A list of exactly what will go into your next commit. Not a copy of " +
     "your files, just their names and content ids.",
 };
+
+// Opening an entity is not progress, so these are not stages. They are the
+// order the picture has to be unfolded in before a verb has anything to act on.
+const ORIENT: readonly (readonly [string, string])[] = [
+  ["laptop", "Open your laptop."],
+  ["files", "Your work is in one of these. Open your files."],
+  ["git", "There is a second database in here. Open .git."],
+  ["index", "One thing left unopened. Open the index."],
+];
 
 const FILE_IS =
   "A file on your disk. Change it and git notices, but does nothing " +
@@ -62,7 +72,11 @@ export function start(): void {
   const promptLine = document.querySelector("[data-prompt]");
   const said = document.querySelector("[data-said]");
 
-  let world = seed();
+  // The world the visitor arrived to, kept so "you changed something" can be a
+  // comparison of two states rather than a tally of clicks.
+  const start_ = seed();
+  let world = start_;
+  let met: ReadonlySet<string> = new Set();
   // Nothing is open at first: two icons and a gap, so the shape of the thing
   // lands before any git word does.
   const open = new Set<string>();
@@ -262,36 +276,18 @@ export function start(): void {
   }
 
   // Suggests, never gates. Every legal action stays available whatever this
-  // line happens to be saying.
+  // line happens to be saying. Orientation comes first because a git verb is
+  // unreachable while the thing it acts on is still folded away; after that
+  // the curriculum drives, and it retires when there is nothing left to show.
   function nextPrompt(): void {
-    if (!open.has("laptop")) {
-      suggest("Open your laptop.");
-      return;
+    met = record(met, world, start_);
+    for (const [id, ask] of ORIENT) {
+      if (!open.has(id)) {
+        suggest(ask);
+        return;
+      }
     }
-    if (!open.has("files")) {
-      suggest("Your work is in one of these. Open your files.");
-      return;
-    }
-    if (!open.has("git")) {
-      suggest("There is a second database in here. Open .git.");
-      return;
-    }
-    if (!open.has("index")) {
-      suggest("One thing left unopened. Open the index.");
-      return;
-    }
-    const dirty = Object.keys(world.working).some(
-      (p) => !isClean(statusFor(world, p)),
-    );
-    if (Object.keys(world.index).length > 0) {
-      suggest("The index is holding your change. Open it and commit.");
-      return;
-    }
-    if (dirty) {
-      suggest("Git has noticed. Open the file and stage that change.");
-      return;
-    }
-    suggest("Open a file and change a line. Watch what git does.");
+    suggest(suggestion(met) ?? "");
   }
 
   // A closed entity opens; anything else tells you what it is. The first click
