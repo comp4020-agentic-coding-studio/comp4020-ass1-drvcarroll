@@ -124,6 +124,29 @@ describe("opening a thing explains what it is", () => {
     expect(document.querySelectorAll("main > button")).toHaveLength(0);
   });
 
+  // The verbs used to be behind a panel that had to be summoned and then
+  // dismissed. They now stand beside the entity for as long as it is open.
+  it("stands an open entity's sentence and verbs beside the picture", () => {
+    press("index");
+    const card = [...document.querySelectorAll(".lane .card")].find((c) =>
+      c.querySelector("h2")?.textContent?.includes(".git/index"),
+    );
+    expect(card?.querySelector(".what")?.textContent).toContain("next commit");
+    expect(document.querySelector(".inspector")?.hasAttribute("hidden")).toBe(
+      true,
+    );
+  });
+
+  it("takes the card away again when the entity is folded away", () => {
+    press("index");
+    press("index");
+    expect(
+      [...document.querySelectorAll(".lane .card h2")].map(
+        (h) => h.textContent,
+      ),
+    ).not.toContain(".git/index");
+  });
+
   it("folds the whole machine back up, contents included", () => {
     press("laptop"); // open, so this folds it away
     expect(
