@@ -25,6 +25,9 @@ export interface Graph {
   // Feedback at the object it happened to. The page-level live region is the
   // accessible mirror of this, not the primary channel.
   annotate(id: string, text: string): void;
+  // The suggestion, drawn beside the entity it names and marking that entity.
+  // Passing no entity, or an entity not currently drawn, hides it.
+  hint(text: string, at?: string): void;
   onLayoutChange(handler: () => void): void;
   onSelect(handler: (id: string) => void): void;
   // Pointer-only, and never on touch: a vertical drag competes with the page
@@ -137,33 +140,55 @@ export function createGraph(
   inspector.hidden = true;
   container.append(inspector);
 
+  // The suggestion, drawn beside the picture and level with the entity it
+  // names. It is HTML for the same reason the inspector is: it wraps.
+  const hintEl = document.createElement("p");
+  hintEl.className = "hint";
+  hintEl.hidden = true;
+  container.append(hintEl);
+
   const selectHandlers: ((id: string) => void)[] = [];
   const dropHandlers: ((from: string, to: string) => void)[] = [];
   let opened: string | undefined;
+  let hinted: string | undefined;
 
   // SVG user units to pixels within the stage. Default preserveAspectRatio
-  // letterboxes, so the offset is not optional.
-  function anchor(): void {
-    if (opened === undefined) return;
-    const box = boxOf(opened);
-    if (box === undefined) return;
+  // letterboxes, so the offset is not optional. One projection, used by both
+  // things that have to sit beside an object: the inspector and the hint.
+  interface Projection {
+    px: (u: number) => number;
+    py: (u: number) => number;
+    room: number;
+  }
+
+  function project(): Projection {
     const [vx = 0, vy = 0, vw = 1, vh = 1] = scene.viewBox
       .split(/\s+/)
       .map(Number);
     const rect = svg.getBoundingClientRect();
     const base = container.getBoundingClientRect();
     const scale = Math.min(rect.width / vw, rect.height / vh);
-    const { x, y } = centre(box);
     const left = rect.left - base.left + (rect.width - vw * scale) / 2;
     const top = rect.top - base.top + (rect.height - vh * scale) / 2;
-    const px = (u: number): number => left + (u - vx) * scale;
+    return {
+      px: (u) => left + (u - vx) * scale,
+      py: (u) => top + (u - vy) * scale,
+      room: base.width,
+    };
+  }
+
+  function anchor(): void {
+    if (opened === undefined) return;
+    const box = boxOf(opened);
+    if (box === undefined) return;
+    const { x, y } = centre(box);
+    const { px, py, room } = project();
 
     // Beside the object, never on top of it: a panel that covers the thing it
     // describes breaks the one link the visitor is being asked to make. It
     // flips to whichever side has room, and only centres if neither does.
     const gap = 12;
     const width = inspector.offsetWidth;
-    const room = base.width;
     const right = px(box.x + box.w) + gap;
     const start = px(box.x) - gap;
     let side = "over";
@@ -177,10 +202,17 @@ export function createGraph(
     }
     inspector.dataset["side"] = side;
     inspector.style.setProperty("--anchor-x", `${String(anchorX)}px`);
-    inspector.style.setProperty(
-      "--anchor-y",
-      `${String(top + (y - vy) * scale)}px`,
-    );
+    inspector.style.setProperty("--anchor-y", `${String(py(y))}px`);
+  }
+
+  // Level with the row it refers to. Recomputed on every redraw and every
+  // resize, because a hint pointing at where an entity used to be is worse
+  // than no hint at all.
+  function placeHint(): void {
+    if (hinted === undefined) return;
+    const box = boxOf(hinted);
+    if (box === undefined) return;
+    hintEl.style.setProperty("--hint-y", `${String(project().py(centre(box).y))}px`);
   }
 
   function closeInspector(): void {
@@ -227,7 +259,10 @@ export function createGraph(
 
   // Resize mid-interaction is one of the things this is marked on, so the
   // anchor is recomputed rather than assumed to survive.
-  window.addEventListener("resize", anchor);
+  window.addEventListener("resize", () => {
+    anchor();
+    placeHint();
+  });
 
   function shapeFor(node: SceneNode): SVGElement[] {
     const { box } = node;
@@ -525,6 +560,7 @@ export function createGraph(
         note.setAttribute("transform", notePlacement(box, note));
     }
     anchor();
+    placeHint();
   }
 
   syncTo(scene);
@@ -545,6 +581,19 @@ export function createGraph(
     setScene(next) {
       make = next;
       syncTo(make(layout));
+    },
+    // The suggestion and the entity it names, set together: the words go
+    // beside the picture and the thing itself takes the pale blue border that
+    // hover and focus already use, so the sentence has something to point at.
+    hint(text: string, at?: string) {
+      if (hinted !== undefined) groups.get(hinted)?.removeAttribute("data-hint");
+      hinted = at !== undefined && boxOf(at) !== undefined ? at : undefined;
+      hintEl.textContent = text;
+      hintEl.hidden = text === "" || hinted === undefined;
+      if (hinted !== undefined) {
+        groups.get(hinted)?.setAttribute("data-hint", "true");
+        placeHint();
+      }
     },
     sendObject(from, to, kind) {
       const a = boxOf(from);

@@ -30,7 +30,7 @@ import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
 import type { Graph } from "../graph/render.js";
 import { layout } from "../graph/layout.js";
-import { record, suggestion } from "./stages.js";
+import { record, suggested } from "./stages.js";
 
 // One sentence per entity, saying what it is. Naming the components before the
 // process is what makes the process legible, and an inspector is the right
@@ -128,8 +128,11 @@ export function start(): void {
     if (said !== null) said.textContent = text;
   };
 
-  const suggest = (text: string): void => {
+  // Said twice, deliberately: once beside the entity it points at, and once in
+  // the hidden line a screen reader reads.
+  const suggest = (text: string, at?: string): void => {
     if (promptLine !== null) promptLine.textContent = text;
+    graph.hint(text, at);
   };
 
   // Changes the world and nothing else, so typing into a file can update the
@@ -556,11 +559,12 @@ export function start(): void {
     met = record(met, world, start_);
     for (const [id, ask] of ORIENT) {
       if (!open.has(id)) {
-        suggest(ask);
+        suggest(ask, id);
         return;
       }
     }
-    suggest(suggestion(met) ?? "");
+    const next = suggested(met);
+    suggest(next?.prompt ?? "", next?.at);
   }
 
   // A closed entity opens; anything else tells you what it is. The first click

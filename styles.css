@@ -48,9 +48,16 @@
   background: var(--panel);
 }
 
+/* A heading and a picture, and the picture takes everything left over. */
 body {
+  display: flex;
+  flex-direction: column;
+
+  /* A definite height, not a minimum: the picture sizes itself against this,
+     and a percentage height has nothing to resolve against a minimum. */
+  height: 100dvh;
   margin: 0;
-  padding: 2rem 1.25rem 3rem;
+  padding: 1.5rem 1.25rem;
   font-family: system-ui, sans-serif;
   line-height: 1.6;
   color: var(--ink);
@@ -58,7 +65,12 @@ body {
 }
 
 main {
-  max-width: 64rem;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 76rem;
   margin: 0 auto;
 }
 
@@ -68,31 +80,54 @@ h1 {
   line-height: 1.1;
 }
 
-/* One suggestion of what to do next, one consequence of what just happened.
-   Two lines of prose on this page, ever. */
-.prompt {
-  margin: 0 0 0.75rem;
-  font-size: 1.05rem;
-}
-
+/* One suggestion of what to do next, one consequence of what just happened -
+   both spoken, neither printed. The suggestion is drawn beside the entity it
+   names and feedback lands on the object, so on screen these two would be the
+   same words twice, further from the thing than the copy that points at it. */
+.prompt,
 .said {
-  min-height: 1.6em;
-  margin: 0.75rem 0 0;
-  color: var(--muted);
-  font-size: 0.95rem;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .stage {
   position: relative;
+  flex: 1;
+  min-height: 0;
+
+  /* The lane the suggestion lives in, reserved rather than overlaid: a hint
+     that covers part of the picture is a hint that has to be dismissed. */
+  padding-inline-end: 15rem;
 }
 
-/* Width fills the measure, but a short picture must not be magnified to fill
-   it. Capping the height lets preserveAspectRatio centre the drawing instead. */
+/* Beside the picture and level with the entity it names, which is the whole
+   difference between telling someone what to do and showing them where. */
+.hint {
+  position: absolute;
+  inset-inline-end: 0;
+  top: var(--hint-y, 50%);
+  width: 14rem;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  transform: translateY(-50%);
+  transition: top 260ms ease;
+}
+
+/* The picture is the page, so it takes the box it is given and
+   preserveAspectRatio centres the drawing inside it. */
 .stage svg {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 68vh;
+  height: 100%;
 }
 
 /* ---- the shapes ---- */
@@ -134,6 +169,12 @@ h1 {
   fill: var(--remote);
   stroke: var(--muted);
   stroke-dasharray: 7 5;
+}
+
+/* The other half of the sentence: the thing itself, in the same pale blue
+   hover and focus already use, so the border means one thing everywhere. */
+.node[data-hint="true"] .shape {
+  stroke: var(--accent);
 }
 
 .node:hover .shape {
@@ -460,6 +501,20 @@ svg[data-dragging] [data-node="index"] .shape {
 }
 
 @media (width <= 700px) {
+  /* No lane to the side at this width, so the hint sits under the picture and
+     keeps pointing by colour instead of by position. */
+  .stage {
+    padding-inline-end: 0;
+    padding-block-end: 4.5rem;
+  }
+
+  .hint {
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    transform: none;
+  }
+
   /* No room to anchor beside anything, so it becomes a sheet. */
   .inspector {
     position: fixed;
