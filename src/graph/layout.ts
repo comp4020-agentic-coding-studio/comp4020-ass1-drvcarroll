@@ -130,9 +130,11 @@ function hitFor(box: Box): Box {
   return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w, h };
 }
 
-const node = (n: Omit<SceneNode, "hit">): SceneNode => ({
+// An explicit hit is for the one case where the drawn box is not the thing you
+// press: an open frame is pressed by its icon, not by its whole interior.
+const node = (n: Omit<SceneNode, "hit"> & { hit?: Box }): SceneNode => ({
   ...n,
-  hit: hitFor(n.box),
+  hit: hitFor(n.hit ?? n.box),
 });
 
 // Split n into rows of at most perRow, as evenly as they divide, so a filling
@@ -191,7 +193,7 @@ export interface Frame {
   dotted?: boolean;
 }
 
-const FRAMES: Record<string, Frame> = {
+export const FRAMES: Record<string, Frame> = {
   server: { id: "server", title: "Git Server", icon: "cylinder", dotted: true },
   laptop: { id: "laptop", title: "Local Device", icon: "laptop" },
   git: { id: "git", title: ".git", icon: "cylinder" },
@@ -246,9 +248,9 @@ function placeFrame(
 ): Placed {
   const isOpen = open.has(frame.id);
   const inner = {
-    x: at.x + m.pad + m.gutter,
+    x: at.x + m.gutter + m.pad,
     y: at.y + m.frameHead,
-    w: at.w - m.pad * 2 - m.gutter,
+    w: at.w - m.gutter - m.pad * 2,
   };
   const body: Placed = isOpen
     ? fill(inner)
@@ -260,8 +262,9 @@ function placeFrame(
     m.frameHead + body.height + m.pad,
     m.gutter + m.pad * 2,
   );
+  // Open, the border starts after the gutter, so the icon sits outside it.
   const box = isOpen
-    ? { x: at.x, y: at.y, w: at.w, h: height }
+    ? { x: at.x + m.gutter, y: at.y, w: at.w - m.gutter, h: height }
     : // Closed, the frame *is* its icon, centred where the bar would be.
       {
         x: at.x + (at.w - m.icon.w) / 2,
@@ -269,11 +272,11 @@ function placeFrame(
         w: m.icon.w,
         h: m.icon.h,
       };
-  // Open, in the gutter and vertically centred; closed, above its own name.
+  // Open, outside the border and vertically centred; closed, above its name.
   const closedSize = Math.min(box.w - 24, box.h - 44);
   const iconBox = isOpen
     ? {
-        x: at.x + m.pad,
+        x: at.x,
         y: at.y + (height - m.gutter) / 2,
         w: m.gutter,
         h: m.gutter,
@@ -296,6 +299,8 @@ function placeFrame(
     badge: badgeFor(world, frame.id),
     empty: isOpen ? body.empty : undefined,
     box,
+    // Open, the icon is the switch; the interior belongs to its contents.
+    hit: isOpen ? iconBox : box,
     parent,
   });
 

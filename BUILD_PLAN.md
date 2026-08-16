@@ -169,3 +169,26 @@ review gate.
 - [x] **28. `CLAUDE.md`.** A reflective phase after every step, assessed against
       the assignment specification, general UI principles and design practice,
       usability metrics, and colour theory.
+
+## Second revision pass: the pop-up, and the viewport
+
+Looking again found four things the first pass had not fixed and one it had made
+worse: the picture shared its viewport with a heading, an entity's icon sat in an
+interior gutter rather than outside its border, an entity's name was pinned to
+its icon rather than to its compartment, and every entity's verbs were behind a
+pop-up that had to be summoned and then dismissed. The prompt is preserved
+verbatim in [`PLAN-UI-REVISION-2.md`](./PLAN-UI-REVISION-2.md).
+
+- [x] **29. The icon leaves the box.** An open frame's border starts after the
+      gutter, so the icon sits outside it on the left; the title is centred on
+      the compartment; and the frame's hit target becomes its icon, so the
+      interior belongs to its contents.
+- [x] **30. A title screen, and a stage that is a whole viewport.** The `h1` gets
+      a screen of its own and the picture gets the next one, each `100dvh` with
+      proximity snapping. The page's width cap goes: the picture is
+      width-limited, so capping the page was what letterboxed it.
+- [x] **31. The pop-up goes, and the lane takes over.** Pressing an entity
+      toggles it either way. Every verb that lived in a frame's inspector moves
+      to a card in the lane beside the picture, level with the row it belongs to,
+      visible for as long as that entity is open. `render.ts` gives up owning the
+      hint and keeps `highlight()` and `topOf()`; the page owns the HTML.

@@ -25,9 +25,12 @@ export interface Graph {
   // Feedback at the object it happened to. The page-level live region is the
   // accessible mirror of this, not the primary channel.
   annotate(id: string, text: string): void;
-  // The suggestion, drawn beside the entity it names and marking that entity.
-  // Passing no entity, or an entity not currently drawn, hides it.
-  hint(text: string, at?: string): void;
+  // Marks the entity a suggestion points at, in the same pale blue hover and
+  // focus use. The words themselves are the page's, drawn beside the picture.
+  highlight(at?: string): void;
+  // The top of an entity's box in stage pixels, so anything the page puts
+  // beside the picture can stand level with the row it belongs to.
+  topOf(id: string): number | undefined;
   onLayoutChange(handler: () => void): void;
   onSelect(handler: (id: string) => void): void;
   // Pointer-only, and never on touch: a vertical drag competes with the page
@@ -140,13 +143,6 @@ export function createGraph(
   inspector.hidden = true;
   container.append(inspector);
 
-  // The suggestion, drawn beside the picture and level with the entity it
-  // names. It is HTML for the same reason the inspector is: it wraps.
-  const hintEl = document.createElement("p");
-  hintEl.className = "hint";
-  hintEl.hidden = true;
-  container.append(hintEl);
-
   const selectHandlers: ((id: string) => void)[] = [];
   const dropHandlers: ((from: string, to: string) => void)[] = [];
   let opened: string | undefined;
@@ -154,7 +150,7 @@ export function createGraph(
 
   // SVG user units to pixels within the stage. Default preserveAspectRatio
   // letterboxes, so the offset is not optional. One projection, used by both
-  // things that have to sit beside an object: the inspector and the hint.
+  // things that have to sit beside an object: the inspector and the lane.
   interface Projection {
     px: (u: number) => number;
     py: (u: number) => number;
@@ -205,16 +201,6 @@ export function createGraph(
     inspector.style.setProperty("--anchor-y", `${String(py(y))}px`);
   }
 
-  // Level with the row it refers to. Recomputed on every redraw and every
-  // resize, because a hint pointing at where an entity used to be is worse
-  // than no hint at all.
-  function placeHint(): void {
-    if (hinted === undefined) return;
-    const box = boxOf(hinted);
-    if (box === undefined) return;
-    hintEl.style.setProperty("--hint-y", `${String(project().py(centre(box).y))}px`);
-  }
-
   function closeInspector(): void {
     if (opened === undefined) return;
     const was = opened;
@@ -261,7 +247,6 @@ export function createGraph(
   // anchor is recomputed rather than assumed to survive.
   window.addEventListener("resize", () => {
     anchor();
-    placeHint();
   });
 
   function shapeFor(node: SceneNode): SVGElement[] {
@@ -324,10 +309,9 @@ export function createGraph(
         }),
       );
       if (node.open === true) {
-        // On the head line the layout already reserved, and left-aligned with
-        // the contents rather than with the gutter, so the row reads as icon
-        // then label then contents.
-        add("frame-title", at.x + at.w + 6, box.y + 18, node.title);
+        // Centred on the head line the layout reserved, so the name belongs to
+        // the whole compartment rather than to the icon beside it.
+        add("frame-title", c.x, box.y + 18, node.title);
         if (node.empty !== undefined) add("empty", c.x, c.y + 12, node.empty);
         return out;
       }
@@ -564,7 +548,6 @@ export function createGraph(
         note.setAttribute("transform", notePlacement(box, note));
     }
     anchor();
-    placeHint();
   }
 
   syncTo(scene);
@@ -586,18 +569,19 @@ export function createGraph(
       make = next;
       syncTo(make(layout));
     },
-    // The suggestion and the entity it names, set together: the words go
-    // beside the picture and the thing itself takes the pale blue border that
-    // hover and focus already use, so the sentence has something to point at.
-    hint(text: string, at?: string) {
+    // The thing the sentence points at takes the pale blue border that hover
+    // and focus already use, so the words beside the picture have something to
+    // point to. The words are the page's business, not the picture's.
+    highlight(at?: string) {
       if (hinted !== undefined) groups.get(hinted)?.removeAttribute("data-hint");
       hinted = at !== undefined && boxOf(at) !== undefined ? at : undefined;
-      hintEl.textContent = text;
-      hintEl.hidden = text === "" || hinted === undefined;
       if (hinted !== undefined) {
         groups.get(hinted)?.setAttribute("data-hint", "true");
-        placeHint();
       }
+    },
+    topOf(id) {
+      const box = boxOf(id);
+      return box === undefined ? undefined : project().py(box.y);
     },
     sendObject(from, to, kind) {
       const a = boxOf(from);

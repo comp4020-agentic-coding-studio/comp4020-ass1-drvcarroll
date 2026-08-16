@@ -86,9 +86,10 @@ describe("every entity opens by keyboard alone", () => {
   it("says what a closed entity is holding, so folding costs nothing", () => {
     expect(node("laptop")?.getAttribute("aria-label")).toContain("0 commits");
     press("laptop");
-    press("files");
-    press("laptop"); // an open entity is inspected, not toggled
-    expect(node("file:README.md")).toBeTruthy();
+    expect(node("laptop")?.getAttribute("aria-expanded")).toBe("true");
+    press("laptop"); // the icon is the switch, both ways
+    expect(node("laptop")?.getAttribute("aria-expanded")).toBe("false");
+    expect(node("laptop")?.getAttribute("aria-label")).toContain("0 commits");
   });
 
   it("moves the prompt on, and mirrors what happened", () => {
@@ -98,7 +99,7 @@ describe("every entity opens by keyboard alone", () => {
       before,
     );
     expect(document.querySelector("[data-said]")?.textContent).toContain(
-      "open",
+      "Your computer",
     );
   });
 });
@@ -110,26 +111,21 @@ describe("opening a thing explains what it is", () => {
     press("files");
   });
 
-  it("opens an inspector on an entity that is already open", () => {
-    press("files");
-    const inspector = document.querySelector(".inspector");
-    expect(inspector?.hasAttribute("hidden")).toBe(false);
-    expect(inspector?.querySelector(".what")?.textContent).toContain("edit");
+  it("says what an entity is when it is opened, and nowhere else", () => {
+    expect(document.querySelector("[data-said]")?.textContent).toContain(
+      "files you actually edit",
+    );
+    expect(document.querySelector(".inspector")?.hasAttribute("hidden")).toBe(
+      true,
+    );
   });
 
-  it("offers folding it away as a verb in the inspector, not a toolbar", () => {
-    press("files");
+  it("keeps every verb out of the page chrome", () => {
     expect(document.querySelectorAll("main > button")).toHaveLength(0);
-    expect(
-      document.querySelector(".inspector .verb")?.textContent,
-    ).toContain("Fold");
   });
 
   it("folds the whole machine back up, contents included", () => {
-    press("laptop"); // open, so this inspects
-    document
-      .querySelector<HTMLButtonElement>(".inspector .verb")
-      ?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    press("laptop"); // open, so this folds it away
     expect(
       [...document.querySelectorAll("[data-node]")].map((n) =>
         n.getAttribute("data-node"),
@@ -143,12 +139,14 @@ describe("opening a thing explains what it is", () => {
 // the keyboard path is complete.
 describe("edit, stage, commit, by keyboard and typing alone", () => {
   const verbs = (): HTMLButtonElement[] => [
-    ...document.querySelectorAll<HTMLButtonElement>(".inspector .verb"),
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ".inspector .verb, .lane .verb",
+    ),
   ];
 
   const press_ = (label: string): void => {
     const button = verbs().find((b) => b.textContent?.includes(label));
-    expect(button, `no "${label}" verb in the inspector`).toBeTruthy();
+    expect(button, `no "${label}" verb on offer`).toBeTruthy();
     button?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   };
 
@@ -189,7 +187,6 @@ describe("edit, stage, commit, by keyboard and typing alone", () => {
     press("file:README.md");
     type("changed");
     press_("Stage this change");
-    press("index");
     press_("Commit these changes");
     press("file:README.md");
     expect(verbs().some((b) => b.textContent?.includes("Stage"))).toBe(false);
@@ -226,9 +223,8 @@ describe("edit, stage, commit, by keyboard and typing alone", () => {
     press("file:README.md");
     type("changed");
     press_("Stage this change");
-    press("index");
     const message = document.querySelector<HTMLInputElement>(
-      ".inspector .message",
+      ".inspector .message, .lane .message",
     );
     expect(message).toBeTruthy();
     if (message !== null) message.value = "first commit";
@@ -246,7 +242,6 @@ describe("edit, stage, commit, by keyboard and typing alone", () => {
     press("file:README.md");
     type("changed");
     press_("Stage this change");
-    press("index");
     press_("Commit these changes");
     const commit = document.querySelector<SVGGElement>(
       '[data-node^="local:commit:"]',

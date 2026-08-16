@@ -29,12 +29,13 @@ import { STASH, pop, stash } from "../git/stash.js";
 import type { Layout } from "../graph/render.js";
 import { createGraph } from "../graph/render.js";
 import type { Graph } from "../graph/render.js";
-import { layout } from "../graph/layout.js";
+import { FRAMES, layout } from "../graph/layout.js";
 import { record, suggested } from "./stages.js";
 
 // One sentence per entity, saying what it is. Naming the components before the
-// process is what makes the process legible, and an inspector is the right
-// home for it because it costs nothing until it is asked for.
+// process is what makes the process legible. It is said when the entity is
+// opened, so the explanation arrives at the moment it is asked for and then
+// gets out of the way rather than living on screen for good.
 const WHAT: Record<string, string> = {
   laptop:
     "Your computer. Everything below the dotted line is here, on this " +
@@ -130,8 +131,20 @@ export function start(): void {
   });
   stage_.append(undoButton);
 
+  // Everything the page says beside the picture: the suggestion, and what each
+  // open entity lets you do. HTML rather than SVG for the same reason the
+  // inspector is - it wraps, and its verbs are real buttons.
+  const lane = document.createElement("div");
+  lane.className = "lane";
+  stage_.append(lane);
+
+  let hintText = "";
+  let hintAt: string | undefined;
+  let draft = ""; // a half-typed commit message
+
   const redraw = (): void => {
     graph.setScene((name: Layout) => layout(world, open, name));
+    paintLane();
   };
 
   // The accessible mirror of what just happened. Feedback itself lands at the
@@ -144,7 +157,10 @@ export function start(): void {
   // the hidden line a screen reader reads.
   const suggest = (text: string, at?: string): void => {
     if (promptLine !== null) promptLine.textContent = text;
-    graph.hint(text, at);
+    hintText = text;
+    hintAt = at;
+    graph.highlight(at);
+    paintLane();
   };
 
   // Where the visitor was before the last thing they did. The git verbs each
@@ -214,7 +230,10 @@ export function start(): void {
     }
     graph.closeInspector();
     redraw();
-    say(`${id} is ${wasOpen ? "folded away" : "open"}.`);
+    // Opening a thing is when its one sentence is worth hearing. On screen it
+    // arrives in the lane, beside the suggestion that sent the visitor there.
+    const what = WHAT[id];
+    say(wasOpen ? `${id} is folded away.` : (what ?? `${id} is open.`));
     nextPrompt();
   }
 
@@ -345,9 +364,9 @@ export function start(): void {
     }
   }
 
-  // The index seals into a snapshot, so its inspector is where a commit is
-  // made: the verb lives on the thing it acts on, not in a toolbar.
-  function inspectIndex(body: HTMLElement): void {
+  // The index seals into a snapshot, so committing belongs to the index: the
+  // verb stands beside the thing it acts on, not in a toolbar.
+  function indexVerbs(body: HTMLElement): void {
     const merging = world.merging;
     if (merging !== undefined) {
       body.append(
@@ -375,10 +394,17 @@ export function start(): void {
     message.className = "message";
     message.placeholder = "what this change does";
     message.setAttribute("aria-label", "Commit message");
+    // The lane is rebuilt whenever the world changes, and a half-typed message
+    // is the visitor's work too.
+    message.value = draft;
+    message.addEventListener("input", () => {
+      draft = message.value;
+    });
     body.append(message);
     body.append(
       verb("Commit these changes", () => {
         const text = message.value.trim() || "a change";
+        draft = "";
         const next = commitIndex(world, text);
         graph.sendObject("index", "git", "inside");
         act(next, `local:commit:${headOid(next.local) ?? ""}`, `Committed: ${text}.`);
@@ -497,7 +523,7 @@ export function start(): void {
 
   // The other machine. Only two verbs reach it, and they are the only two in
   // the whole piece that cross the gap.
-  function inspectServer(body: HTMLElement): void {
+  function serverVerbs(body: HTMLElement): void {
     if (headOid(world.local) !== undefined) {
       body.append(
         verb("Push to the server", () => {
@@ -555,49 +581,98 @@ export function start(): void {
       title = id.slice(10);
       inspectRef(title, body);
     } else {
-      const what = WHAT[id];
-      if (what !== undefined) body.append(line(what, "what"));
-      if (id === "index") inspectIndex(body);
-      if (id === "server") inspectServer(body);
-      // Only once there is a commit to come back to. Before that there is no
-      // wall to be stuck at, and the verb would be a control looking for a job.
-      if (
-        id === "files" &&
-        headOid(world.local) !== undefined &&
-        !status(world).every(isClean)
-      ) {
-        body.append(
-          verb("Put this work aside", () => {
-            act(
-              stash(world),
-              `local:ref:${STASH}`,
-              "Your work is a commit off to the side. Your files are clean.",
-            );
-          }),
-        );
-      }
-      if (id === "laptop") {
-        body.append(
-          verb(
-            "Start over",
-            () => {
-              world = start_;
-              open.clear();
-              act(world, "laptop", "Back to the beginning.");
-            },
-            true,
-          ),
-        );
-      }
-      if (id in WHAT) {
-        body.append(
-          verb("Fold this away", () => {
-            toggle(id);
-          }),
-        );
-      }
+      return; // an entity is opened and closed, not opened up in a panel
     }
     graph.openInspector(id, title, body);
+  }
+
+  // What an open entity lets you do. These used to be a panel that had to be
+  // summoned and then dismissed; they now stand in the lane beside the picture
+  // for exactly as long as the entity is open, which is the same disclosure
+  // rule with none of the clicking.
+  function verbsFor(id: string): HTMLElement | undefined {
+    const body = document.createElement("div");
+    if (id === "index") indexVerbs(body);
+    if (id === "server") serverVerbs(body);
+    // Only once there is a commit to come back to. Before that there is no
+    // wall to be stuck at, and the verb would be a control looking for a job.
+    if (
+      id === "files" &&
+      headOid(world.local) !== undefined &&
+      !status(world).every(isClean)
+    ) {
+      body.append(
+        verb("Put this work aside", () => {
+          act(
+            stash(world),
+            `local:ref:${STASH}`,
+            "Your work is a commit off to the side. Your files are clean.",
+          );
+        }),
+      );
+    }
+    if (id === "laptop") {
+      body.append(
+        verb(
+          "Start over",
+          () => {
+            world = start_;
+            open.clear();
+            act(world, "laptop", "Back to the beginning.");
+          },
+          true,
+        ),
+      );
+    }
+    return body.childElementCount === 0 ? undefined : body;
+  }
+
+  // One lane, to the right of the picture, holding one card per open entity
+  // and the suggestion. Each card stands level with the row it belongs to, and
+  // slides down only far enough to clear the card above it, so the lane reads
+  // top to bottom in the same order as the picture.
+  function paintLane(): void {
+    lane.replaceChildren();
+    const cards: { at: string; el: HTMLElement }[] = [];
+    for (const id of Object.keys(FRAMES)) {
+      if (!open.has(id)) continue;
+      const card = document.createElement("section");
+      card.className = "card";
+      const name = document.createElement("h2");
+      name.textContent = FRAMES[id]?.title ?? id;
+      card.append(name);
+      // What this thing is, then what can be done to it. The sentence is the
+      // one place the piece explains in words, and it stands beside the thing
+      // it explains for as long as that thing is open.
+      const what = WHAT[id];
+      if (what !== undefined) card.append(line(what, "what"));
+      const verbs = verbsFor(id);
+      if (verbs !== undefined) card.append(verbs);
+      cards.push({ at: id, el: card });
+    }
+    if (hintText !== "" && hintAt !== undefined) {
+      const card = document.createElement("section");
+      card.className = "card hint";
+      card.append(line(hintText, "ask"));
+      cards.push({ at: hintAt, el: card });
+    }
+
+    const flowing = graph.layout === "narrow";
+    lane.hidden = cards.length === 0;
+    if (flowing) lane.dataset["flow"] = "true";
+    else delete lane.dataset["flow"];
+
+    let cursor = 0;
+    const placed = cards
+      .map((card) => ({ ...card, top: graph.topOf(card.at) ?? 0 }))
+      .sort((a, b) => a.top - b.top);
+    for (const card of placed) {
+      lane.append(card.el);
+      if (flowing) continue;
+      const top = Math.max(card.top, cursor);
+      card.el.style.top = `${String(top)}px`;
+      cursor = top + card.el.offsetHeight + 8;
+    }
   }
 
   // Suggests, never gates. Every legal action stays available whatever this
@@ -616,10 +691,11 @@ export function start(): void {
     suggest(next?.prompt ?? "", next?.at);
   }
 
-  // A closed entity opens; anything else tells you what it is. The first click
-  // on the page is therefore never a decision, only a look inside.
+  // An entity's icon is its switch, both ways: pressing it opens the entity,
+  // pressing it again folds it away. Anything else opens the inspector of the
+  // object it is, which is where content and its verbs live.
   graph.onSelect((id) => {
-    if (id in WHAT && !open.has(id)) toggle(id);
+    if (id in FRAMES) toggle(id);
     else inspect(id);
   });
 
@@ -632,6 +708,15 @@ export function start(): void {
     const next = stage(world, path);
     graph.sendObject(from, "index", "inside");
     act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
+  });
+
+  // The lane stands level with the picture, so it is re-placed whenever the
+  // picture moves.
+  window.addEventListener("resize", () => {
+    paintLane();
+  });
+  graph.onLayoutChange(() => {
+    paintLane();
   });
 
   nextPrompt();

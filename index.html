@@ -17,19 +17,29 @@
     </nav>
 
     <main>
-      <h1>How to GIT: An interactive explainer</h1>
-
       <!--
-        The page is the picture. Both lines of prose stay in the DOM and out of
-        sight: the suggestion is drawn beside the entity it points at, and
-        feedback lands on the object it happened to. These two carry the same
-        words to a screen reader, which is the only place they are still read.
+        A title screen the visitor scrolls past. It costs one gesture and buys
+        the picture a whole viewport of its own underneath, with nothing above
+        it competing for the height.
       -->
-      <p data-prompt class="prompt">Open your Local Device.</p>
+      <section class="cover">
+        <h1>How to GIT: An interactive explainer</h1>
+        <p class="cue" aria-hidden="true">Scroll down</p>
+      </section>
 
-      <div id="stage" data-graph data-testid="interaction" class="stage"></div>
+      <section class="screen">
+        <!--
+          The page is the picture. Both lines of prose stay in the DOM and out
+          of sight: the suggestion is drawn beside the entity it points at, and
+          feedback lands on the object it happened to. These two carry the same
+          words to a screen reader, which is the only place they are read.
+        -->
+        <p data-prompt class="prompt">Open your Local Device.</p>
 
-      <p data-said data-testid="output" class="said" aria-live="polite"></p>
+        <div id="stage" data-graph data-testid="interaction" class="stage"></div>
+
+        <p data-said data-testid="output" class="said" aria-live="polite"></p>
+      </section>
     </main>
 
     <script type="module" src="./main.ts"></script>

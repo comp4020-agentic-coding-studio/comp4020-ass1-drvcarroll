@@ -48,16 +48,21 @@
   background: var(--panel);
 }
 
-/* A heading and a picture, and the picture takes everything left over. */
-body {
-  display: flex;
-  flex-direction: column;
+/* Two screens, one gesture apart: the title, then the picture with a whole
+   viewport to itself. Proximity rather than mandatory, so the snap helps the
+   scroll rather than fighting it. */
+html {
+  scroll-snap-type: y proximity;
+}
 
-  /* A definite height, not a minimum: the picture sizes itself against this,
-     and a percentage height has nothing to resolve against a minimum. */
-  height: 100dvh;
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
   margin: 0;
-  padding: 1.5rem 1.25rem;
   font-family: system-ui, sans-serif;
   line-height: 1.6;
   color: var(--ink);
@@ -65,18 +70,39 @@ body {
 }
 
 main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
   width: 100%;
-  max-width: 76rem;
-  margin: 0 auto;
 }
 
+/* Two screens, each exactly one viewport. A definite height, not a minimum:
+   the picture sizes itself against this, and a percentage height has nothing
+   to resolve against a minimum. */
+.cover,
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: 1.5rem 1.25rem;
+  scroll-snap-align: start;
+}
+
+.cover {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.cue {
+  margin: 1.25rem 0 0;
+  color: var(--muted);
+}
+
+/* The picture is width-limited: it is wider than it is tall, so every pixel of
+   width it is given comes back as height. Capping the page would letterbox the
+   picture against the viewport it was just given, so only the title is capped. */
 h1 {
-  margin: 0.25rem 0 0.5rem;
-  font-size: clamp(1.8rem, 5vw, 2.8rem);
+  max-width: 20ch;
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.4rem);
   line-height: 1.1;
 }
 
@@ -104,22 +130,51 @@ h1 {
   padding-inline-end: 15rem;
 }
 
-/* Beside the picture and level with the entity it names, which is the whole
-   difference between telling someone what to do and showing them where. */
-.hint {
+/* One lane beside the picture, holding the suggestion and what each open
+   entity lets you do. Every card stands level with the row it belongs to,
+   which is the whole difference between telling someone what to do and
+   showing them where - and it means nothing has to be summoned or dismissed. */
+.lane {
   position: absolute;
-  inset-inline-end: 0;
-  top: var(--hint-y, 50%);
+  inset: 0 0 0 auto;
   width: 14rem;
+  pointer-events: none;
+}
+
+.card {
+  position: absolute;
+  inset-inline: 0;
   margin: 0;
   padding: 0.55rem 0.75rem;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
   font-size: 0.92rem;
   line-height: 1.45;
-  transform: translateY(-50%);
+  pointer-events: auto;
   transition: top 260ms ease;
+}
+
+.card h2 {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+/* The suggestion, in the same pale blue the entity it names is wearing. */
+.card.hint {
+  border-color: var(--accent);
+}
+
+.card .what {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.card .ask {
+  margin: 0;
 }
 
 /* The picture is the page, so it takes the box it is given and
@@ -204,6 +259,7 @@ text {
 
 .frame-title {
   fill: var(--muted);
+  text-anchor: middle;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -518,18 +574,29 @@ svg[data-dragging] [data-node="index"] .shape {
 }
 
 @media (width <= 700px) {
-  /* No lane to the side at this width, so the hint sits under the picture and
-     keeps pointing by colour instead of by position. */
+  /* No room for a lane at the side, so it becomes a strip under the picture
+     and keeps pointing by colour instead of by position. */
   .stage {
     padding-inline-end: 0;
-    padding-block-end: 4.5rem;
+    padding-block-end: 9rem;
   }
 
-  .hint {
-    top: auto;
-    bottom: 0;
+  .lane {
+    inset: auto 0 0;
     width: 100%;
-    transform: none;
+    max-height: 9rem;
+    overflow-y: auto;
+  }
+
+  .lane[data-flow] .card {
+    position: static;
+    margin-block-start: 0.4rem;
+  }
+
+  /* The strip is the scarcest surface in the piece, so it carries the verbs
+     and not the explanations. The hidden live region still says them. */
+  .lane .what {
+    display: none;
   }
 
   /* No room to anchor beside anything, so it becomes a sheet. */
