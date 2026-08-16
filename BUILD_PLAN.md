@@ -68,27 +68,29 @@ still the right code, and only the domain around them was wrong.
 - [x] **5. Reduce the renderer.** Strip the DNS surface from
       `src/graph/render.ts`, keep the scene diff, the inspector, the keyboard
       handling and the resize re-anchor. Add `src/graph/motion.ts`.
-- [ ] **6. The canvas is live.** Entities expand and collapse on click and
+- [x] **6. The canvas is live.** Entities expand and collapse on click and
       Enter/Space, with `aria-expanded` and closed badges. Read-only. Rewrite
       `styles.css`. This is the orientation experience on its own, before a
       single git verb exists, and it is worth looking at hard.
-- [ ] **7. The first three verbs.** Edit, stage, commit, in the inspectors of
+- [x] **7. The first three verbs.** Edit, stage, commit, in the inspectors of
       the objects they act on, keyboard first. Feedback annotations at the
       object; `[data-said]` is the accessible mirror.
-- [ ] **7a. Undo.** `src/git/undo.ts`, `spec/undo.test.ts`. Unstage and discard.
+- [x] **7a. Undo.** `src/git/undo.ts`, `spec/undo.test.ts`. Unstage and discard.
       Every later verb ships with its reversal in the same step.
 - [ ] **8. Drag.** Pointer only, with a grip signifier and a ghost target slot
       on press. Disabled entirely on touch. Routes to the same call.
-- [ ] **9. Stages.** `src/ui/stages.ts`, `spec/stages.test.ts`. Prompts suggest
+- [x] **9. Stages.** `src/ui/stages.ts`, `spec/stages.test.ts`. Prompts suggest
       and never gate: the test asserts a later verb works before its stage is
       reached, and that reaching it out of order marks it met.
-- [ ] **10. Branches, merge, remote, push.** Each with its reversal. Free play
+- [x] **10. Branches, merge, remote, push.** Each with its reversal. Free play
       when every stage is met: the prompt retires, start over is available.
       **This is the shippable floor.**
-- [ ] **11. Evidence.** Rewrite `PROCESS.md` to 400-600 words and three or four
+- [x] **11. Evidence.** Rewrite `PROCESS.md` to 400-600 words and three or four
       moments. Write `reflections/assignment-1.md`. `pnpm check:evidence` green.
-- [ ] **12. Ship.** Repo public, push, CI green, Pages serving. Do this here,
-      not at the end.
+- [~] **12. Ship.** All commits pushed. **Blocked on the repo being made
+      public**, which needs a GitHub login this machine does not have: while it
+      is private CI stays skipped and Pages 404s. Everything else continues
+      around it.
 - [ ] **13. The collaborator, and a refused push.**
 - [ ] **14. Merge with two parents.**
 - [ ] **15. Conflicts.** Resolved with the first two verbs the visitor learned.
@@ -97,5 +99,18 @@ still the right code, and only the domain around them was wrong.
 - [ ] **18. Rewrite `STRUCTURE.md`,** naming the simplifications honestly.
 - [ ] **19. Re-push, confirm CI and Pages, final evidence check.**
 
-**Do not start step 13 before step 12 has a green CI run and a live URL.** If
-the clock runs out, cut 17, then 16, then degrade 15.
+**Re-aligned after step 10.** Two changes, both from reviews rather than from
+the plan being wrong:
+
+- **Step 8 (drag) moves to last, and is cut first.** It is a pointer-only
+  enhancement over a path that is already complete by click and keyboard, so it
+  adds the least of anything left to a marked artefact. The cut order is now 8,
+  then 17, then 16, then 15 degrades.
+- **The fast-forward merge is a verb but not a stage.** A stage's predicate can
+  only read world state, and the state left by a fast-forward — two branch names
+  on one commit — is identical to the state left by simply starting a branch.
+  Rather than fake it with a counter, the curriculum records branch, checkout and
+  push, and merge stays available from the chip that owns it.
+
+**Step 13 onward proceeds without waiting on step 12**, since the block is not
+something building can clear.
