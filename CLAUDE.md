@@ -194,6 +194,35 @@ Two standing rules fall out of this:
   tests in `spec/`. Judged lines ("one strong idea with a point of view") get
   named in the plan so they stay visible without pretending a test holds them.
 
+### Work from a written plan, and review at every step
+
+Work proceeds from `BUILD_PLAN.md`, a committed list of numbered steps. Keeping
+the plan in the repo makes it process evidence and lets it survive a session
+ending. **Every step ends with the same review gate, and the gate is never
+skipped:**
+
+1. **Implement** the step, and nothing beyond it.
+2. **Check.** `pnpm check` green. Never commit a red state.
+3. **Look.** Open the rendered page at both marking viewports and confirm what
+   is actually on screen matches what the step claimed to build. The rendered
+   page is the truth, and a green suite is not a substitute for looking at it.
+4. **Commit.** One commit, naming what changed and why.
+5. **Review against the spec.** Re-read the published spec lines and marking
+   bands, and say which lines this step moved, which are still partial, and
+   which are untouched.
+6. **Review against the design principles.** Walk the two design principles
+   above against what now exists. Did a persistent control appear that belonged
+   in an inspector? Did a stage become reachable without a real change to the
+   model? Did a verb ship without its reversal? Did the prose grow past two
+   lines?
+7. **Re-align.** If 5 or 6 found drift, amend the remaining steps in
+   `BUILD_PLAN.md` before starting the next one. Amending the plan is the
+   expected outcome of a review, not a sign the plan was wrong.
+
+A step is not finished when the code works. It is finished when it has been
+checked, looked at, committed, and reviewed against both the spec and the
+principles.
+
 ## Design principle: compress, then condense
 
 Aim for the most information in the least interface. A minimal UI is not one
@@ -218,6 +247,30 @@ This is a density target, not a sparseness target. Empty is as much a failure
 as cluttered: whitespace that carries no information is wasted, and so is a
 paragraph restating what the graphic already shows.
 
+### What the finished display owes the visitor
+
+- **What is on screen at rest is the minimum that carries the current state.**
+  An object shows its identity and one status glyph. Content, detail, history
+  and full text live in the inspector opened from that object. Information the
+  visitor did not ask for is dumped, not displayed.
+- **Surface grows only as the visitor earns it.** Regions not yet reached stay
+  closed rather than pre-populated with everything the page can eventually show,
+  and a closed thing carries a small badge of what is inside so folding it away
+  costs no information.
+- **Two lines of prose on the canvas, ever**: one suggestion of what to do next,
+  one consequence of what just happened. Explanation belongs in the inspector of
+  the thing being explained, where it costs nothing until asked for. Each
+  entity's inspector opens with one sentence saying what that entity is, because
+  naming the components before the process is what makes the process legible.
+- **Feedback appears at the object it happened to.** Information placed far from
+  the thing it describes is read as unrelated, and a status line below the
+  picture splits attention at the moment the concept is forming. A page-level
+  live region stays as the accessible mirror, not the primary channel.
+- **Prefer a difference that can be seen over one that must be read.** Where the
+  argument turns on same or different, two identifiers or two states, carry it
+  in a preattentive channel like colour or position and let the text be the
+  supporting detail rather than the signal. Never colour alone.
+
 ## Design principle: manipulation, not narration
 
 The visitor must change the system, not their position in a story about it. A
@@ -236,9 +289,42 @@ and no amount of polish on that button makes the page interactive.
 - **Count the verbs before shipping.** If the honest answer is "two buttons",
   the artefact is a diagram, whatever else is true of it.
 
-Sequencing controls — play, step, speed — are a transport for a model, never
-the interaction itself. They earn their place only once there is a model to
-pace, and they are not evidence that the page is interactive.
+Sequencing controls (play, step, speed, next, back) are a transport for a model,
+never the interaction itself. They earn their place only once there is a model
+to pace, and they are not evidence that the page is interactive.
+
+### Progression is earned, not advanced
+
+An explanation that builds understanding slowly is a sequence of stages, each
+teaching one thing. The danger is that a staged explainer is the case most
+likely to reach for a transport control, so the rules are stricter here, not
+looser.
+
+- **A stage unlocks on a real change to the model, never on a button press.**
+  The unlock condition is a predicate over system state. If a stage can be
+  reached without the visitor changing anything, it is narration.
+- **Stages record, they never gate.** The prompt suggests the next concept; any
+  action that is legal in the current state stays available at all times,
+  whatever stage introduced it. A fixed enforced order is a next button wearing
+  a costume, however it is triggered, and the willingness to be poked out of
+  order is the whole difference between an explorable model and a tutorial.
+- **Later stages reuse the verbs learned in earlier ones** rather than
+  introducing new controls. The last stage should add no surface at all.
+- **Scaffolding must fade.** When the stages are exhausted the instruction
+  retires and everything stays available, so there is somewhere to consolidate
+  what was learned.
+
+### Every action can be taken back
+
+A visitor who cannot back out stops poking the model, and a model nobody pokes
+teaches nothing. Reversal is therefore a correctness requirement, not a
+courtesy, and it is what makes "prefer knobs that can produce a bad outcome"
+safe to mean.
+
+Where the subject has its own vocabulary for undoing, **use that vocabulary
+rather than a generic undo button**. The reversal is then a lesson rather than
+an escape hatch, and it usually turns out to be the thing the visitor most
+wanted to understand. A verb ships with its reversal or it is not finished.
 
 This sits in tension with compress-then-condense, deliberately. That principle
 removes surface; this one demands the visitor have things to do. They resolve
