@@ -77,7 +77,7 @@ still the right code, and only the domain around them was wrong.
       object; `[data-said]` is the accessible mirror.
 - [x] **7a. Undo.** `src/git/undo.ts`, `spec/undo.test.ts`. Unstage and discard.
       Every later verb ships with its reversal in the same step.
-- [ ] **8. Drag.** Pointer only, with a grip signifier and a ghost target slot
+- [x] **8. Drag.** Pointer only, with a grip signifier and a ghost target slot
       on press. Disabled entirely on touch. Routes to the same call.
 - [x] **9. Stages.** `src/ui/stages.ts`, `spec/stages.test.ts`. Prompts suggest
       and never gate: the test asserts a later verb works before its stage is

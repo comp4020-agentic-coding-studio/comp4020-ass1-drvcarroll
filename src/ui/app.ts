@@ -570,5 +570,16 @@ export function start(): void {
     else inspect(id);
   });
 
+  // The same call the inspector's verb makes, so there is one way to stage and
+  // the drag is an enhancement over it rather than a second implementation.
+  graph.onDrop((from, to) => {
+    if (!from.startsWith("file:") || to !== "index") return;
+    const path = from.slice(5);
+    if (isClean(statusFor(world, path))) return;
+    const next = stage(world, path);
+    graph.sendObject(from, "index", "inside");
+    act(next, `blob:${next.index[path] ?? ""}`, `Staged ${path}.`);
+  });
+
   nextPrompt();
 }

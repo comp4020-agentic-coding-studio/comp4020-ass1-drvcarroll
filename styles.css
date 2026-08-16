@@ -226,6 +226,20 @@ text {
   text-anchor: middle;
 }
 
+/* A file can be dragged into the index on a pointer device, so it says so.
+   Touch gets tap-to-inspect instead, which is the same path the keyboard uses. */
+@media (hover: hover) and (pointer: fine) {
+  .node[data-kind="file"] {
+    cursor: grab;
+  }
+}
+
+/* The legal destination, visible before the drop rather than found by failing. */
+svg[data-dragging] [data-node="index"] .shape {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+}
+
 /* ---- the links ---- */
 
 .link {

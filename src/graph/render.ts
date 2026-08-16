@@ -27,6 +27,10 @@ export interface Graph {
   annotate(id: string, text: string): void;
   onLayoutChange(handler: () => void): void;
   onSelect(handler: (id: string) => void): void;
+  // Pointer-only, and never on touch: a vertical drag competes with the page
+  // scroll on a phone, and a gesture that is flaky where it is marked is worth
+  // less than not having it. Click and keyboard already do all of this.
+  onDrop(handler: (from: string, to: string) => void): void;
   openInspector(id: string, title: string, body: HTMLElement): void;
   closeInspector(): void;
   inspecting(): string | undefined;
@@ -134,6 +138,7 @@ export function createGraph(
   container.append(inspector);
 
   const selectHandlers: ((id: string) => void)[] = [];
+  const dropHandlers: ((from: string, to: string) => void)[] = [];
   let opened: string | undefined;
 
   // SVG user units to pixels within the stage. Default preserveAspectRatio
@@ -322,9 +327,46 @@ export function createGraph(
       tabindex: "0",
       "aria-label": describe(node),
     });
+    // Set by a drag that actually moved, so the click it ends with does not
+    // also open an inspector on the thing just dropped.
+    let dragged = false;
     group.addEventListener("click", () => {
+      if (dragged) {
+        dragged = false;
+        return;
+      }
       for (const handler of selectHandlers) handler(node.id);
     });
+    if (node.kind === "file") {
+      group.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "touch" || dropHandlers.length === 0) return;
+        const origin = { x: event.clientX, y: event.clientY };
+        group.setPointerCapture(event.pointerId);
+        svg.setAttribute("data-dragging", node.id);
+        const move = (m: PointerEvent): void => {
+          if (Math.hypot(m.clientX - origin.x, m.clientY - origin.y) > 6) {
+            dragged = true;
+          }
+        };
+        const up = (u: PointerEvent): void => {
+          group.removeEventListener("pointermove", move);
+          group.removeEventListener("pointerup", up);
+          svg.removeAttribute("data-dragging");
+          if (!dragged) return;
+          // Whatever is under the finger at the end, walked up to the nearest
+          // thing the drawing knows about. Dropping anywhere illegal is simply
+          // nothing happening, which is the honest answer.
+          const under = document.elementFromPoint(u.clientX, u.clientY);
+          const onto = under?.closest("[data-node]") as HTMLElement | null;
+          const to = onto?.dataset["node"];
+          if (to !== undefined && to !== node.id) {
+            for (const handler of dropHandlers) handler(node.id, to);
+          }
+        };
+        group.addEventListener("pointermove", move);
+        group.addEventListener("pointerup", up);
+      });
+    }
     group.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault(); // Space would scroll the page out from under it
@@ -526,6 +568,9 @@ export function createGraph(
     },
     onLayoutChange(handler) {
       handlers.push(handler);
+    },
+    onDrop(handler) {
+      dropHandlers.push(handler);
     },
     onSelect(handler) {
       selectHandlers.push(handler);
