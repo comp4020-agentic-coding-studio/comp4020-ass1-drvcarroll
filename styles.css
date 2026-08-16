@@ -1,20 +1,29 @@
 /* Two computers and one gap between them. The palette is deliberately small:
    the picture carries the argument, so colour is spent on identity (an oid's
-   hue) and on the one boundary that matters (the network gap). */
+   hue) and on the one boundary that matters (the network gap).
+
+   The ground is GitHub's own: a near-black canvas, grey borders that separate
+   without drawing attention, and one accent blue. A page about git that looks
+   like the tool it explains asks the visitor to learn one visual language, not
+   two - and a dark ground is what lets an oid's hue read as identity rather
+   than as decoration. Every value below clears 4.5:1 on its own background. */
 
 :root {
-  --ink: #0f1720;
-  --muted: #5b6875;
-  --line: #cfd8e3;
-  --bg: #fbfcfd;
-  --panel: #fff;
-  --laptop: #f1f5fa;
-  --inner: #fff;
-  --remote: #f6f2fb;
-  --accent: #0b5fff;
-  --warn: #b26a00;
-  --new: #0f8a4f;
-  --danger: #c02a2a;
+  color-scheme: dark;
+
+  --ink: #e6edf3;
+  --muted: #8b949e;
+  --line: #30363d;
+  --bg: #0d1117;
+  --panel: #161b22;
+  --inset: #010409;
+  --laptop: #161b22;
+  --inner: #0d1117;
+  --remote: #171522;
+  --accent: #58a6ff;
+  --warn: #d29922;
+  --new: #3fb950;
+  --danger: #f85149;
   --radius: 0.6rem;
 }
 
@@ -112,12 +121,12 @@ h1 {
    only filled surface. Its contents are drawn on top of it, lighter. */
 [data-node="laptop"] .shape {
   fill: var(--laptop);
-  stroke: #b8c4d2;
+  stroke: var(--line);
 }
 
 [data-node="server"] .shape {
   fill: var(--remote);
-  stroke: #b09fd0;
+  stroke: #8957e6;
   stroke-dasharray: 7 5;
 }
 
@@ -132,8 +141,8 @@ h1 {
 
 .shape.commit,
 .shape.blob {
-  fill: hsl(var(--hue, 210) 62% 92%);
-  stroke: hsl(var(--hue, 210) 45% 52%);
+  fill: hsl(var(--hue, 210) 42% 22%);
+  stroke: hsl(var(--hue, 210) 62% 58%);
 }
 
 .shape.chip {
@@ -213,14 +222,14 @@ text {
 }
 
 .oid {
-  fill: hsl(var(--hue, 210) 55% 28%);
+  fill: hsl(var(--hue, 210) 75% 74%);
   font-family: ui-monospace, "SF Mono", menlo, monospace;
   font-size: 11px;
   text-anchor: middle;
 }
 
 .chip-name {
-  fill: #fff;
+  fill: var(--bg);
   font-size: 12px;
   font-weight: 600;
   text-anchor: middle;
@@ -262,7 +271,7 @@ svg[data-dragging] [data-node="index"] .shape {
 
 /* The one boundary anything has to cross. */
 .link[data-kind="network"] {
-  stroke: #a08cc8;
+  stroke: #8957e6;
   stroke-width: 2;
   stroke-dasharray: 6 6;
 }
@@ -280,7 +289,7 @@ svg[data-dragging] [data-node="index"] .shape {
 }
 
 .flight[data-kind="network"] {
-  fill: #7c5fc0;
+  fill: #a371f7;
 }
 
 .node[data-entering="true"] {
@@ -313,7 +322,7 @@ svg[data-dragging] [data-node="index"] .shape {
   border: 1px solid var(--accent);
   border-radius: 0.4rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--bg);
   font: inherit;
   font-size: 0.9rem;
   cursor: pointer;
@@ -358,7 +367,7 @@ svg[data-dragging] [data-node="index"] .shape {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
-  box-shadow: 0 8px 28px rgb(15 23 32 / 18%);
+  box-shadow: 0 8px 28px rgb(1 4 9 / 60%);
   transform: translate(-50%, -50%);
   inset-inline-start: var(--anchor-x, 50%);
   inset-block-start: var(--anchor-y, 50%);
@@ -402,7 +411,7 @@ svg[data-dragging] [data-node="index"] .shape {
   padding: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--inset);
   color: inherit;
   font-family: ui-monospace, monospace;
   font-size: 0.82rem;
@@ -416,7 +425,7 @@ svg[data-dragging] [data-node="index"] .shape {
   padding: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--inset);
   color: inherit;
   font: inherit;
   font-size: 0.88rem;

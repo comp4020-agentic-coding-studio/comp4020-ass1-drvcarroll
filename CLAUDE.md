@@ -215,13 +215,44 @@ skipped:**
    in an inspector? Did a stage become reachable without a real change to the
    model? Did a verb ship without its reversal? Did the prose grow past two
    lines?
-7. **Re-align.** If 5 or 6 found drift, amend the remaining steps in
+7. **Review the interface as an interface.** The principles above are this
+   project's own rules and will not catch a page that breaks the general ones.
+   Against what is now on screen at both viewports:
+   - **UI principles and design practice.** Alignment, proximity, and a visual
+     hierarchy that matches the order things should be read in. Consistent
+     spacing from a scale rather than per-element guesses. One idea per region.
+     Nothing decorative that carries no information.
+   - **Interaction design.** Is every affordance signified before it is used
+     rather than discovered by failing? Does every action produce visible
+     feedback at the object it happened to? Is state legible without being
+     narrated? Can the visitor always tell where they are and what they can do
+     next?
+   - **Usability metrics.** Steps to reach the first meaningful action; targets
+     at or above 44px; whether anything is reachable by pointer alone; whether a
+     keyboard visitor gets the same path; whether an error state explains itself
+     rather than merely refusing.
+   - **Colour theory.** Contrast at or above 4.5:1 for text and 3:1 for
+     boundaries that carry meaning. A palette with one accent, used for one
+     idea, not three. Hue reserved for identity rather than spent on decoration.
+     Nothing signalled by colour alone.
+8. **Review the code.** Does it work for the reasons the tests claim, or only in
+   the cases the tests cover? Is anything now duplicated that should have been a
+   modification rather than an addition? Is anything recomputed per frame that
+   could be derived once? Is the file still readable end to end by someone who
+   did not write it?
+9. **Re-align.** If 5 through 8 found drift, amend the remaining steps in
    `BUILD_PLAN.md` before starting the next one. Amending the plan is the
    expected outcome of a review, not a sign the plan was wrong.
 
 A step is not finished when the code works. It is finished when it has been
-checked, looked at, committed, and reviewed against both the spec and the
-principles.
+checked, looked at, committed, and reviewed against the spec, the principles,
+the interface, and the code.
+
+**The gate needs no human input.** It is a self-check performed and acted on
+alone, in the same run, precisely so that drift is caught while it is one step
+old and cheap. Nothing in it is a question for the user, a place to hand back,
+or a reason to pause: it is the mechanism that makes running to the end safe,
+not an interruption to it.
 
 ### Run the plan to the end without stopping to report
 
@@ -238,6 +269,12 @@ legible commit trail is the process evidence, and a running commentary is not.
   or cutting steps needs no permission; the plan already says the cut order.
 - **Report once, at the end**: what shipped, what was cut and why, and anything
   left for the user.
+
+The review gate and this rule are not in tension. The gate is what makes running
+to completion safe: every step is reflected on before the next one starts, so a
+long unattended run cannot drift far, and the reflection costs a few minutes
+against a whole pass rebuilt later. Skipping the gate to move faster is the one
+way to make the run worth less than not having made it.
 
 ## Design principle: compress, then condense
 

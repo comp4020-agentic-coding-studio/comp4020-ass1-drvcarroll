@@ -158,6 +158,6 @@ review gate.
       model held up under revision, and the interface did not. Opus is good at
       structure and poor at interface across many revisions, so self-reflection
       stages need to be built into the harness rather than requested.
-- [ ] **28. `CLAUDE.md`.** A reflective phase after every step, assessed against
+- [x] **28. `CLAUDE.md`.** A reflective phase after every step, assessed against
       the assignment specification, general UI principles and design practice,
       usability metrics, and colour theory.
