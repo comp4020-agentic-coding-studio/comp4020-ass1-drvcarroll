@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { Box, LayoutName, SceneNode } from "../src/graph/layout.js";
 import { FRAME_IDS, TARGET, layout } from "../src/graph/layout.js";
 import type { World } from "../src/git/repo.js";
-import { commitIndex, edit, emptyWorld, stage } from "../src/git/repo.js";
+import {
+  commitIndex,
+  edit,
+  emptyWorld,
+  headOid,
+  stage,
+} from "../src/git/repo.js";
+import { rebase } from "../src/git/rebase.js";
 import { fetch, push, teammatePushes } from "../src/git/remote.js";
 
 // Both viewports are marked in full, so neither is a fallback for the other,
@@ -186,6 +193,31 @@ describe("the commit chain", () => {
     const mine = chips.find((c) => c.title === "main") as SceneNode;
     // Two lanes: their tip is drawn somewhere ours is not.
     expect(theirs.box.y).not.toBe(mine.box.y);
+  });
+
+  // A commit nothing points at is still in .git, so it is still drawn - faint.
+  // A rebase that made its old line vanish would teach that the work was lost.
+  it("keeps a rebased-away commit on the canvas, ghosted", () => {
+    const mine = commitIndex(
+      stage(edit(emptyWorld(), "README.md", "mine\n"), "README.md"),
+      "mine",
+    );
+    // Diverged for real: they committed on the server after I pushed, and I
+    // committed again here. Neither line contains the other.
+    const shared = fetch(
+      teammatePushes(push(mine), "notes.md", "theirs\n", "theirs"),
+    );
+    const before = commitIndex(
+      stage(edit(shared, "mine.md", "later\n"), "mine.md"),
+      "later",
+    );
+    const was = headOid(before.local) as string;
+    const after = rebase(before, "origin/main");
+    const scene = layout(after, new Set(["laptop", "git"]), "wide");
+    const drawn = (oid: string): SceneNode | undefined =>
+      scene.nodes.find((n) => n.id === `local:commit:${oid}`);
+    expect(drawn(was)?.ghost).toBe(true);
+    expect(drawn(headOid(after.local) as string)?.ghost).toBe(false);
   });
 
   it("draws a line from each commit to its parent", () => {

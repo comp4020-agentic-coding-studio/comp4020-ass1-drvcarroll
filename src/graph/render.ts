@@ -356,6 +356,10 @@ export function createGraph(
       group.setAttribute("aria-expanded", String(node.open === true));
     }
     if (node.dotted === true) group.setAttribute("data-dotted", "true");
+    // Toggled, not just set: a commit stops being unreachable the moment a
+    // branch is pointed back at it, and the drawing has to follow.
+    if (node.ghost === true) group.setAttribute("data-ghost", "true");
+    else group.removeAttribute("data-ghost");
     if (node.hue !== undefined) {
       group.style.setProperty("--hue", String(node.hue));
     }

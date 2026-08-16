@@ -7,6 +7,7 @@ import type { World } from "../git/repo.js";
 import { headOid } from "../git/repo.js";
 import { isAncestor } from "../git/branch.js";
 import { STASH } from "../git/stash.js";
+import { unreachable } from "../git/rebase.js";
 
 export interface Stage {
   readonly id: string;
@@ -101,6 +102,12 @@ export const STAGES: readonly Stage[] = [
     teaches: "Stash is a commit off to the side, not a special place.",
     prompt: "Change a file, then try to check out another branch. Then stash.",
     met: (world) => Object.keys(world.local.refs).includes(STASH),
+  },
+  {
+    id: "rebase",
+    teaches: "Replaying changes the hashes, because a commit includes its parent.",
+    prompt: "Diverged again? Replay your work onto theirs instead of merging.",
+    met: (world) => unreachable(world).length > 0,
   },
   {
     id: "conflict",

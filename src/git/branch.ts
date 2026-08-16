@@ -3,7 +3,7 @@
 // or destroyed, which is the entire lesson these operations carry.
 
 import type { ObjectStore } from "./objects.js";
-import { ancestry, readBlob, readTree } from "./objects.js";
+import { ancestry, readBlob, readCommit, readTree } from "./objects.js";
 import type { World } from "./repo.js";
 import { headEntries, headOid } from "./repo.js";
 import { isClean, status } from "./status.js";
@@ -76,6 +76,20 @@ export function canFastForward(world: World, name: string): boolean {
   const at = headOid(world.local);
   if (from === undefined || at === undefined || from === at) return false;
   return isAncestor(world.local.objects, at, from);
+}
+
+// Moving the branch you are on to any commit still in .git. This is what makes
+// an undone rebase possible: the old commits were never deleted, only left
+// with nothing pointing at them.
+export function resetTo(world: World, oid: string): World {
+  const head = world.local.head;
+  if (head.kind !== "branch" || readCommit(world.local.objects, oid) === undefined) {
+    return world;
+  }
+  return materialise({
+    ...world,
+    local: { ...world.local, refs: { ...world.local.refs, [head.name]: oid } },
+  });
 }
 
 // Undoing a commit is moving the pointer back, and that is the whole reason a

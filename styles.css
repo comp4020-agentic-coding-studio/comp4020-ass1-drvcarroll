@@ -273,6 +273,12 @@ text {
   opacity: 0;
 }
 
+/* Unreachable, not gone: what a rebase left behind is still in .git, and the
+   drawing says so rather than quietly dropping it. */
+.node[data-ghost="true"] {
+  opacity: 0.3;
+}
+
 /* Feedback at the object it happened to, not at the bottom of the page. The
    halo lets a note land on the object rather than in a clear margin: it stays
    legible over a chip, a border, or another shape. */

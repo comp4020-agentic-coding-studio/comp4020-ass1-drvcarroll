@@ -42,6 +42,8 @@ export interface SceneNode {
   open?: boolean;
   dotted?: boolean;
   icon?: IconName;
+  // A commit nothing points at any more: still in .git, drawn faint.
+  ghost?: boolean;
   parent?: string;
 }
 
@@ -357,6 +359,12 @@ function placeCommits(
     for (const c of line) seen.add(c.oid);
     lanes.push(line);
   }
+  // What a rebase left behind gets its own lane. Commits do not disappear when
+  // the last name moves off them, and drawing them is why the undo can work.
+  const ghosts = Object.values(repo.objects)
+    .filter((o) => o.kind === "commit" && !seen.has(o.oid))
+    .map((o) => o as Commit);
+  if (ghosts.length > 0) lanes.push(ghosts);
   if (lanes.length === 0) {
     return {
       nodes: [],
@@ -414,6 +422,7 @@ function placeCommits(
         title: c.message,
         glyph: c.oid,
         hue: hueFor(c.oid),
+        ghost: !seen.has(c.oid),
         box: { x: spot.x, y: spot.y, w: m.commit, h: m.commit },
         parent: repoOf === "local" ? "git" : "server",
       }),

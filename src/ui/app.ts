@@ -3,6 +3,7 @@
 // the drawing cannot disagree with the model.
 
 import type { World } from "../git/repo.js";
+import { readCommit } from "../git/objects.js";
 import {
   commitIndex,
   discard,
@@ -12,9 +13,17 @@ import {
   stage,
   unstage,
 } from "../git/repo.js";
-import { branch, canFastForward, checkout, merge, resetBack } from "../git/branch.js";
+import {
+  branch,
+  canFastForward,
+  checkout,
+  merge,
+  resetBack,
+  resetTo,
+} from "../git/branch.js";
 import { canPush, fetch, push, teammatePushes } from "../git/remote.js";
 import { abortMerge, startMerge } from "../git/merge.js";
+import { canRebase, rebase, unreachable } from "../git/rebase.js";
 import { isClean, status, statusFor } from "../git/status.js";
 import { STASH, pop, stash } from "../git/stash.js";
 import type { Layout } from "../graph/render.js";
@@ -72,6 +81,10 @@ const REF_IS =
 const STASH_IS =
   "Work put aside, as a commit that no branch points at. It is not a special " +
   "place: getting it back is just reading that snapshot over your files.";
+
+const COMMIT_IS =
+  "A snapshot of every file, named by a hash of its content and its parents. " +
+  "Change any of that and it is a different commit, with a different name.";
 
 const BLOB_IS =
   "The content of a file, named by a hash of that content. It is already " +
@@ -255,6 +268,31 @@ export function start(): void {
     );
   }
 
+  // A commit says what it is and what it came from. When nothing points at it
+  // any more, it also offers the way back, which is the whole reason a rebase
+  // is safe: the old line is still here.
+  function inspectCommit(oid: string, body: HTMLElement): void {
+    body.append(line(COMMIT_IS, "what"));
+    const c = readCommit(world.local.objects, oid);
+    if (c === undefined) return;
+    const from =
+      c.parents.length === 0
+        ? "The first commit, so it has no parent."
+        : `"${c.message}", on top of ${c.parents.join(" and ")}.`;
+    body.append(line(from, "state"));
+    if (unreachable(world).includes(oid)) {
+      body.append(
+        verb(
+          "Point this branch back here",
+          () => {
+            act(resetTo(world, oid), `local:commit:${oid}`, "Back on the old line. The replayed ones are unreachable now.");
+          },
+          true,
+        ),
+      );
+    }
+  }
+
   // The index seals into a snapshot, so its inspector is where a commit is
   // made: the verb lives on the thing it acts on, not in a toolbar.
   function inspectIndex(body: HTMLElement): void {
@@ -344,6 +382,19 @@ export function start(): void {
             }),
           );
           continue;
+        }
+        // The other way through a divergence: say your work again on top of
+        // theirs. Offered beside the merge so the choice is the lesson.
+        if (canRebase(world, other)) {
+          body.append(
+            verb(`Replay this onto ${other}`, () => {
+              act(
+                rebase(world, other),
+                `local:ref:${name}`,
+                `Same changes, new hashes. The old ones are still in .git.`,
+              );
+            }),
+          );
         }
         // Diverged: a real merge, which may land in a conflicted state. That
         // state is reached by the same button, because it is the same verb.
@@ -445,6 +496,9 @@ export function start(): void {
     } else if (id.startsWith("blob:")) {
       title = id.slice(5);
       inspectBlob(title, body);
+    } else if (id.startsWith("local:commit:")) {
+      title = id.slice(13);
+      inspectCommit(title, body);
     } else if (id.startsWith("local:ref:")) {
       title = id.slice(10);
       inspectRef(title, body);
