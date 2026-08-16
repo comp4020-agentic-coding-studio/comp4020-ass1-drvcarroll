@@ -269,3 +269,49 @@ describe("the phone gets the same picture, stacked", () => {
     expect(node("server")).toBeTruthy();
   });
 });
+
+// The escape hatch under the git verbs. Each of those keeps its own reversal in
+// git's own vocabulary; this takes back the last thing that happened, whatever
+// it was, so exploring costs nothing.
+describe("undo takes back the last interaction", () => {
+  const takeBack = (): HTMLButtonElement | null =>
+    document.querySelector(".take-back");
+
+  beforeEach(() => {
+    boot();
+  });
+
+  it("starts with nothing to take back", () => {
+    expect(takeBack()?.disabled).toBe(true);
+  });
+
+  it("closes an entity that was just opened", () => {
+    press("laptop");
+    expect(node("git")).toBeTruthy();
+    expect(takeBack()?.disabled).toBe(false);
+    takeBack()?.click();
+    expect(node("git")).toBeNull();
+    expect(takeBack()?.disabled).toBe(true);
+  });
+
+  it("restores the world an edit changed", () => {
+    for (const id of ["laptop", "files"]) press(id);
+    press("file:README.md");
+    const contents = (): HTMLTextAreaElement => {
+      const text = document.querySelector("textarea");
+      if (text === null) throw new Error("no file contents to edit");
+      return text;
+    };
+    const before = contents().value;
+    const text = contents();
+    text.value = `${before}\nchanged`;
+    text.dispatchEvent(new window.Event("input", { bubbles: true }));
+    takeBack()?.click();
+    press("file:README.md");
+    expect(contents().value).toBe(before);
+  });
+
+  it("stays out of the page's own furniture", () => {
+    expect(document.querySelectorAll("main > button")).toHaveLength(0);
+  });
+});

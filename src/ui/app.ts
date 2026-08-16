@@ -118,6 +118,18 @@ export function start(): void {
     layout(world, open, name),
   );
 
+  // On the picture rather than in the page: every git verb still lives in the
+  // inspector of the object it acts on, and this is not a git verb.
+  const undoButton = document.createElement("button");
+  undoButton.type = "button";
+  undoButton.className = "verb take-back";
+  undoButton.textContent = "Undo";
+  undoButton.disabled = true;
+  undoButton.addEventListener("click", () => {
+    undo();
+  });
+  stage_.append(undoButton);
+
   const redraw = (): void => {
     graph.setScene((name: Layout) => layout(world, open, name));
   };
@@ -135,9 +147,45 @@ export function start(): void {
     graph.hint(text, at);
   };
 
+  // Where the visitor was before the last thing they did. The git verbs each
+  // keep their own reversal, in git's own vocabulary, because that reversal is
+  // a lesson; this is the escape hatch underneath them, and it exists because a
+  // visitor who cannot back out stops poking the model.
+  interface Moment {
+    world: World;
+    open: ReadonlySet<string>;
+    // Consecutive keystrokes in one file are one thing done, not forty.
+    mark?: string;
+  }
+
+  const history: Moment[] = [];
+  const DEPTH = 50;
+
+  function remember(mark?: string): void {
+    const last = history.at(-1);
+    if (mark !== undefined && last?.mark === mark) return;
+    history.push({ world, open: new Set(open), mark });
+    if (history.length > DEPTH) history.shift();
+    undoButton.disabled = false;
+  }
+
+  function undo(): void {
+    const last = history.pop();
+    if (last === undefined) return;
+    world = last.world;
+    open.clear();
+    for (const id of last.open) open.add(id);
+    undoButton.disabled = history.length === 0;
+    graph.closeInspector();
+    redraw();
+    say("Took that back.");
+    nextPrompt();
+  }
+
   // Changes the world and nothing else, so typing into a file can update the
   // status glyph without the panel being torn out from under the cursor.
-  function apply(next: World): void {
+  function apply(next: World, mark?: string): void {
+    remember(mark);
     world = next;
     redraw();
     nextPrompt();
@@ -155,6 +203,7 @@ export function start(): void {
   // Opening an entity changes no git state, so it never counts as progress. It
   // gates access instead: you cannot edit a file before you open your files.
   function toggle(id: string): void {
+    remember();
     const wasOpen = open.has(id);
     if (wasOpen) open.delete(id);
     else open.add(id);
@@ -247,7 +296,7 @@ export function start(): void {
     };
 
     text.addEventListener("input", () => {
-      apply(edit(world, path, text.value));
+      apply(edit(world, path, text.value), `edit:${path}`);
       refresh();
     });
     body.append(text, rest);

@@ -432,8 +432,12 @@ export function createGraph(
     if (group === undefined) return;
     group.setAttribute("aria-label", describe(node));
     group.setAttribute("data-kind", node.kind);
-    if (node.glyph !== undefined && node.kind === "file") {
-      group.setAttribute("data-glyph", node.glyph);
+    // Cleared as well as set: a file that goes back to clean has no letter,
+    // and the colour that went with it has to go too.
+    if (node.kind === "file") {
+      const glyph = node.glyph ?? "";
+      if (glyph === "") group.removeAttribute("data-glyph");
+      else group.setAttribute("data-glyph", glyph);
     }
     if (node.kind === "frame") {
       group.setAttribute("aria-expanded", String(node.open === true));

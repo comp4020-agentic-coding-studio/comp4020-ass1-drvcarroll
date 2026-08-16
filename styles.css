@@ -379,6 +379,23 @@ svg[data-dragging] [data-node="index"] .shape {
   cursor: pointer;
 }
 
+/* The one control that lives on the picture instead of inside an inspector,
+   and it says so by being quiet: an outline, in the corner, disabled until
+   there is something to take back. */
+.take-back {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  border-color: var(--line);
+  background: none;
+  color: var(--muted);
+}
+
+.take-back:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .verb + .verb {
   margin-left: 0.4rem;
 }
